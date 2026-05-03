@@ -1,0 +1,21 @@
+target_languages:
+  - english
+  - tagalog
+  - cebuano
+  - ilocano
+  - hiligaynon
+  - mixed_english_tagalog
+  - mixed_english_cebuano
+  - mixed_other
+  - unknown
+  - too_short
+
+thresholds:
+  min_chars_for_detection: 15
+  strong_confidence: 0.80
+  fallback_confidence: 0.60
+
+fallback:
+  use_openai_when_uncertain: true
+  use_openai_for_short_text: false
+

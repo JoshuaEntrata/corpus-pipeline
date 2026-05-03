@@ -1,0 +1,53 @@
+ai_terms:
+  english:
+    - ai
+    - artificial intelligence
+    - machine learning
+    - deep learning
+    - neural network
+    - chatgpt
+    - chatbot
+    - algorithm
+    - llm
+    - generative ai
+  filipino_common:
+    - ai
+    - artificial intelligence
+    - chatbot
+    - algorithm
+    - modelo
+    - teknolohiya
+    - awtomasyon
+
+health_terms:
+  english:
+    - health
+    - healthcare
+    - medical
+    - medicine
+    - doctor
+    - nurse
+    - hospital
+    - clinic
+    - patient
+    - diagnosis
+    - treatment
+    - symptoms
+    - public health
+    - mental health
+  filipino_common:
+    - kalusugan
+    - pangkalusugan
+    - doktor
+    - duktor
+    - ospital
+    - pasyente
+    - sakit
+    - sintomas
+    - gamot
+    - lunas
+    - nars
+    - klinika
+    - panglawas
+    - tambal
+
