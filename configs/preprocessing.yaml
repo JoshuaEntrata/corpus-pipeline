@@ -1,0 +1,16 @@
+input_paths:
+  - data/raw/reddit_scraped.csv
+  - data/raw/youtube_scraped.csv
+  - data/raw/manual_csv_scraped.csv
+
+output_folder: data/processed
+
+cleaning:
+  replace_urls: true
+  replace_users: true
+  min_chars_for_classification: 15
+
+flags:
+  add_keyword_flags: true
+  add_duplicate_text_flag: true
+

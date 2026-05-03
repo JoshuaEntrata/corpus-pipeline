@@ -52,6 +52,12 @@ normalized_text_rows:
     collection_query: string_or_null
     author_id_hash: string_or_null
     is_duplicate_text: boolean
+    is_empty_text: boolean
+    is_too_short: boolean
+    has_ai_keyword: boolean
+    has_health_keyword: boolean
+    needs_classification: boolean
+    needs_language_detection: boolean
     text_hash: string
     metadata_json: json_or_null
 
@@ -76,4 +82,3 @@ language_detection:
     detector_votes_json: json
     used_openai_fallback: boolean
     language_detected_at_utc: datetime
-

@@ -35,6 +35,12 @@ NORMALIZED_TEXT_ROW_FIELDS = [
     "collection_query",
     "author_id_hash",
     "is_duplicate_text",
+    "is_empty_text",
+    "is_too_short",
+    "has_ai_keyword",
+    "has_health_keyword",
+    "needs_classification",
+    "needs_language_detection",
     "text_hash",
     "metadata_json",
 ]
@@ -60,4 +66,3 @@ LANGUAGE_DETECTION_FIELDS = [
     "used_openai_fallback",
     "language_detected_at_utc",
 ]
-
