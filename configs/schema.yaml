@@ -2,80 +2,50 @@ version: v1
 
 raw_collection:
   required:
-    - run_id
     - source_platform
     - source_item_id
     - collection_method
-    - collected_at_utc
   fields:
-    run_id: string
     source_platform: string
     source_item_id: string
     source_url: string_or_null
     collection_method: string
-    collection_query: string_or_null
-    collected_at_utc: datetime
     created_at_utc: datetime_or_null
-    author_id_hash: string_or_null
     title: string_or_null
     body_text: string_or_null
     description: string_or_null
     transcript: string_or_null
     comments_json: json_or_null
-    engagement_json: json_or_null
-    raw_json: json_or_string
-    manual_file_name: string_or_null
 
 normalized_text_rows:
   required:
-    - text_item_id
     - source_platform
-    - source_item_id
-    - text_type
-    - raw_text
-    - clean_text
-    - text_hash
+    - id
+    - preprocessed_text
+    - collection_method
   fields:
-    text_item_id: string
-    run_id: string
     source_platform: string
-    source_item_id: string
-    conversation_root_id: string_or_null
-    parent_item_id: string_or_null
-    text_type: string
-    raw_text: string
-    clean_text: string
-    source_url: string_or_null
-    created_at_utc: datetime_or_null
-    collected_at_utc: datetime
+    id: string
+    preprocessed_text: string
     collection_method: string
-    collection_query: string_or_null
-    author_id_hash: string_or_null
-    is_duplicate_text: boolean
-    is_empty_text: boolean
-    is_too_short: boolean
     has_ai_keyword: boolean
     has_health_keyword: boolean
     needs_classification: boolean
     needs_language_detection: boolean
-    text_hash: string
-    metadata_json: json_or_null
 
 classification:
   fields:
-    text_item_id: string
+    text: string
     ai_healthcare_label: string
     ai_healthcare_confidence: float_or_string
-    classifier_version: string
     classification_reason_short: string
     classified_at_utc: datetime
     used_prefilter: boolean
     prefilter_result: string_or_null
-    model_name: string_or_null
 
 language_detection:
   fields:
-    text_item_id: string
+    id: string
     language_label: string
     language_confidence: float_or_string
     language_detector_version: string

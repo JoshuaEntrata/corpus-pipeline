@@ -2,7 +2,6 @@ import pandas as pd
 import praw
 import os
 import csv
-import hashlib
 import json
 import time
 import logging
@@ -18,7 +17,11 @@ load_dotenv()
 
 # Get project root directory
 project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 print(f"Project root: {project_root}")
+
+from src.contracts import RAW_COLLECTION_FIELDS
 
 # Setup logging
 log_dir = project_root / "logs" / "collectors"
@@ -49,25 +52,7 @@ def set_csv_field_size_limit():
 
 set_csv_field_size_limit()
 
-RAW_FIELDNAMES = [
-    "run_id",
-    "source_platform",
-    "source_item_id",
-    "source_url",
-    "collection_method",
-    "collection_query",
-    "collected_at_utc",
-    "created_at_utc",
-    "author_id_hash",
-    "title",
-    "body_text",
-    "description",
-    "transcript",
-    "comments_json",
-    "engagement_json",
-    "raw_json",
-    "manual_file_name",
-]
+RAW_FIELDNAMES = RAW_COLLECTION_FIELDS
 
 print(f"Output CSV: {output_csv}")
 print(f"Error log: {error_log_path}")
@@ -159,68 +144,64 @@ def epoch_to_utc_iso(value):
         return None
 
 
-def hash_identifier(value):
-    """Hash author/channel identifiers instead of storing raw usernames."""
-    if not value or value == "[deleted]":
-        return None
-
-    salt = os.getenv("AUTHOR_HASH_SALT", "")
-    payload = f"{salt}:{value}".encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
-
-
 def strip_reddit_kind(value):
     if not value:
         return None
     return value.split("_", 1)[1] if "_" in value else value
 
 
-def migrate_legacy_record(row):
-    """Map the first scraper CSV shape into the raw collection schema."""
-    author = row.get("author")
-    comments = []
-    try:
-        legacy_comments = json.loads(row.get("comments") or "[]")
-    except json.JSONDecodeError:
-        legacy_comments = []
-
-    for comment in legacy_comments:
-        comments.append(
-            {
-                "source_item_id": comment.get("id"),
-                "parent_item_id": comment.get("parent_id"),
-                "conversation_root_id": row.get("id") or None,
-                "author_id_hash": hash_identifier(comment.get("author")),
-                "body": clean_text(comment.get("body")),
-                "created_at_utc": epoch_to_utc_iso(comment.get("created_utc")),
-                "is_reply": comment.get("is_reply"),
-            }
-        )
-
-    legacy_raw = dict(row)
-    legacy_raw.pop("author", None)
-    legacy_raw.pop("comments", None)
-    legacy_raw["author_id_hash"] = hash_identifier(author)
-    legacy_raw["comments_json"] = comments
+def normalize_comment_record(comment, root_id):
+    parent_item_id = comment.get("parent_item_id") or comment.get("parent_id")
+    created_at_utc = comment.get("created_at_utc") or epoch_to_utc_iso(
+        comment.get("created_utc")
+    )
+    is_reply = comment.get("is_reply")
+    if is_reply is None:
+        is_reply = parent_item_id not in (None, root_id)
 
     return {
-        "run_id": "legacy",
-        "source_platform": "reddit",
-        "source_item_id": row.get("id"),
-        "source_url": row.get("url"),
-        "collection_method": "legacy",
-        "collection_query": None,
-        "collected_at_utc": None,
-        "created_at_utc": epoch_to_utc_iso(row.get("created_utc")),
-        "author_id_hash": hash_identifier(author),
+        "source_item_id": comment.get("source_item_id") or comment.get("id"),
+        "parent_item_id": parent_item_id,
+        "body": clean_text(comment.get("body")),
+        "created_at_utc": created_at_utc,
+        "is_reply": is_reply,
+    }
+
+
+def load_comment_records(row):
+    comments_value = row.get("comments_json") or row.get("comments") or "[]"
+    try:
+        comments = json.loads(comments_value)
+    except (TypeError, json.JSONDecodeError):
+        comments = []
+
+    root_id = row.get("source_item_id") or row.get("id")
+    return [
+        normalize_comment_record(comment, root_id)
+        for comment in comments
+        if isinstance(comment, dict)
+    ]
+
+
+def migrate_legacy_record(row):
+    """Map older Reddit scraper CSV shapes into the compact raw schema."""
+    source_item_id = row.get("source_item_id") or row.get("id")
+    comments = load_comment_records(row)
+
+    return {
+        "source_platform": row.get("source_platform") or "reddit",
+        "source_item_id": source_item_id,
+        "source_url": row.get("source_url") or row.get("url"),
+        "collection_method": row.get("collection_method") or "legacy",
+        "created_at_utc": row.get("created_at_utc")
+        or epoch_to_utc_iso(row.get("created_utc")),
         "title": clean_text(row.get("title")),
-        "body_text": clean_text(row.get("submission")),
-        "description": None,
-        "transcript": None,
+        "body_text": clean_text(
+            row.get("body_text") or row.get("submission") or row.get("selftext")
+        ),
+        "description": clean_text(row.get("description")),
+        "transcript": clean_text(row.get("transcript")),
         "comments_json": json_dumps(comments),
-        "engagement_json": json_dumps({"subreddit": row.get("subreddit")}),
-        "raw_json": json_dumps(legacy_raw),
-        "manual_file_name": None,
     }
 
 
@@ -286,14 +267,8 @@ def get_comments_data(submission):
                 {
                     "source_item_id": comment.id,
                     "parent_item_id": parent_item_id,
-                    "conversation_root_id": submission.id,
-                    "source_url": f"https://www.reddit.com{comment.permalink}",
-                    "author_id_hash": hash_identifier(
-                        comment.author.name if comment.author else None
-                    ),
                     "body": clean_text(comment.body),
                     "created_at_utc": epoch_to_utc_iso(comment.created_utc),
-                    "score": getattr(comment, "score", None),
                     "is_reply": parent_item_id != submission.id,
                 }
             )
@@ -304,50 +279,23 @@ def get_comments_data(submission):
         return json_dumps([])
 
 
-def save_submission(submission, collection_method, collection_query, run_id):
+def save_submission(submission, collection_method, _collection_query=None, _run_id=None):
     """Save a single submission to CSV."""
     try:
         ensure_output_csv()
-        collected_at = utc_now_iso()
         comments_json = get_comments_data(submission)
         reddit_url = f"https://www.reddit.com{submission.permalink}"
-        engagement = {
-            "score": getattr(submission, "score", None),
-            "upvote_ratio": getattr(submission, "upvote_ratio", None),
-            "num_comments": getattr(submission, "num_comments", None),
-            "subreddit": submission.subreddit.display_name,
-        }
-        raw_item = {
-            "id": submission.id,
-            "name": getattr(submission, "name", None),
-            "title": clean_text(submission.title),
-            "selftext": clean_text(submission.selftext),
-            "created_utc": epoch_to_utc_iso(submission.created_utc),
-            "url": getattr(submission, "url", None),
-            "permalink": reddit_url,
-            "subreddit": submission.subreddit.display_name,
-            "engagement": engagement,
-        }
         record = {
-            "run_id": run_id,
             "source_platform": "reddit",
             "source_item_id": submission.id,
             "source_url": reddit_url,
             "collection_method": collection_method,
-            "collection_query": collection_query,
-            "collected_at_utc": collected_at,
             "created_at_utc": epoch_to_utc_iso(submission.created_utc),
-            "author_id_hash": hash_identifier(
-                submission.author.name if submission.author else None
-            ),
             "title": clean_text(submission.title),
             "body_text": clean_text(submission.selftext),
             "description": None,
             "transcript": None,
             "comments_json": comments_json,
-            "engagement_json": json_dumps(engagement),
-            "raw_json": json_dumps(raw_item),
-            "manual_file_name": None,
         }
 
         # Append to CSV

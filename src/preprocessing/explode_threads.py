@@ -34,13 +34,6 @@ def parse_json(value, default):
         return default
 
 
-def compact_metadata(value):
-    parsed = parse_json(value, {})
-    if isinstance(parsed, dict):
-        return parsed
-    return {}
-
-
 def text_present(value):
     return value not in (None, "") and str(value).strip() != ""
 
@@ -59,14 +52,7 @@ def root_text_items(record):
                 "parent_item_id": None,
                 "text_type": text_type,
                 "raw_text": raw_text,
-                "source_url": record.get("source_url"),
-                "created_at_utc": record.get("created_at_utc"),
-                "author_id_hash": record.get("author_id_hash"),
-                "metadata": {
-                    "source_column": column,
-                    "engagement": compact_metadata(record.get("engagement_json")),
-                    "manual_file_name": record.get("manual_file_name"),
-                },
+                "collection_method": record.get("collection_method"),
             }
 
 
@@ -86,34 +72,13 @@ def comment_text_items(record):
             "source_item_id": comment.get("source_item_id") or comment.get("id"),
             "conversation_root_id": comment.get("conversation_root_id")
             or record.get("source_item_id"),
-            "parent_item_id": comment.get("parent_item_id"),
+            "parent_item_id": comment.get("parent_item_id") or comment.get("parent_id"),
             "text_type": text_type,
             "raw_text": comment.get("body"),
-            "source_url": comment.get("source_url") or record.get("source_url"),
-            "created_at_utc": comment.get("created_at_utc")
-            or comment.get("created_utc"),
-            "author_id_hash": comment.get("author_id_hash"),
-            "metadata": {
-                key: value
-                for key, value in comment.items()
-                if key
-                not in {
-                    "source_item_id",
-                    "id",
-                    "parent_item_id",
-                    "conversation_root_id",
-                    "source_url",
-                    "author_id_hash",
-                    "body",
-                    "created_at_utc",
-                    "created_utc",
-                    "is_reply",
-                }
-            },
+            "collection_method": record.get("collection_method"),
         }
 
 
 def explode_raw_record(record):
     yield from root_text_items(record)
     yield from comment_text_items(record)
-

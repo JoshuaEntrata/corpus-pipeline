@@ -25,6 +25,8 @@ python -m src.orchestration.run_collectors --all
 Config lives in `configs/collectors.yaml`. Raw schema fields are documented in
 `configs/schema.yaml`, and collected IDs are tracked in
 `data/registry/collected_ids.csv`.
+Collector outputs keep only extracted text/source attributes plus
+`source_platform` and `collection_method`.
 
 ## Preprocessing
 
@@ -39,3 +41,25 @@ python -m src.orchestration.run_preprocessing --source manual_csv
 ```
 
 Outputs are written to `data/processed/normalized_text_rows_<run_id>.csv`.
+The preprocessing CSV is intentionally compact: source platform, text-row ID,
+preprocessed text, collection method, keyword flags, and classification/language
+detection flags.
+
+## Classification
+
+Classify normalized rows for AI-in-healthcare relevance. By default this uses
+the local multilingual prefilter only and does not spend API calls:
+
+```bash
+python -m src.orchestration.run_classification
+```
+
+To call OpenAI for likely relevant rows, opt in explicitly:
+
+```bash
+python -m src.orchestration.run_classification --use-model --max-model-calls 50
+```
+
+Outputs are written to `data/classified/ai_healthcare_classified_<run_id>.csv`.
+The classified CSV keeps only the text, label, confidence, short reason,
+timestamp, and prefilter fields.

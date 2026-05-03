@@ -6,14 +6,12 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.storage.ids import IdRegistry
 from src.storage.read_write import set_csv_field_size_limit
-
 
 set_csv_field_size_limit()
 
@@ -52,12 +50,6 @@ DEFAULT_CONFIG = {
             },
             "output_path": "data/raw/youtube_scraped.csv",
         },
-        "manual_csv": {
-            "enabled": True,
-            "modes": ["manual_csv"],
-            "input_folder": "data/manual_uploads",
-            "output_path": "data/raw/manual_csv_scraped.csv",
-        },
         "ensembledata": {"enabled": False},
     },
 }
@@ -86,9 +78,8 @@ def parse_scalar(value):
         return False
     if lowered in ("null", "none", "~"):
         return None
-    if (
-        (value.startswith('"') and value.endswith('"'))
-        or (value.startswith("'") and value.endswith("'"))
+    if (value.startswith('"') and value.endswith('"')) or (
+        value.startswith("'") and value.endswith("'")
     ):
         return value[1:-1]
     try:
@@ -247,9 +238,7 @@ def run_reddit(config, args, registry, results, run_id):
             rate_limit_sec=rate_limit,
             run_id=run_id,
         )
-        add_result(
-            results, "reddit", "subreddit_keyword", collected, skipped, failed
-        )
+        add_result(results, "reddit", "subreddit_keyword", collected, skipped, failed)
 
     if "keyword" in modes:
         keywords = read_csv_column(inputs["keywords"], inputs["keyword_column"])
@@ -290,24 +279,6 @@ def run_youtube(config, args, registry, results, run_id):
     refresh_registry(registry, source_config["output_path"], "youtube")
 
 
-def run_manual_csv(config, args, registry, results, run_id):
-    source_config = config["collectors"]["manual_csv"]
-    modes = selected_modes(source_config, args.mode)
-    if not modes:
-        return
-
-    from src.collectors.manual_csv import collect_from_folder
-
-    collected, skipped, failed = collect_from_folder(
-        input_folder=project_path(source_config["input_folder"]),
-        output_csv=project_path(source_config["output_path"]),
-        registry_path=project_path(config["run"]["registry_path"]),
-        run_id=run_id,
-    )
-    add_result(results, "manual_csv", "manual_csv", collected, skipped, failed)
-    refresh_registry(registry, source_config["output_path"], "manual_csv")
-
-
 def save_summary(run_id, results, registry_path):
     summary_dir = PROJECT_ROOT / "logs" / "collectors"
     summary_dir.mkdir(parents=True, exist_ok=True)
@@ -333,13 +304,13 @@ def main():
     parser = argparse.ArgumentParser(description="Run configured data collectors.")
     parser.add_argument(
         "--source",
-        choices=["all", "reddit", "youtube", "manual_csv"],
+        choices=["all", "reddit", "youtube"],
         default="all",
         help="Collector source to run. Defaults to all enabled collectors.",
     )
     parser.add_argument(
         "--mode",
-        choices=["all", "targeted", "keyword", "subreddit_keyword", "manual_csv"],
+        choices=["all", "targeted", "keyword", "subreddit_keyword"],
         default="all",
         help="Collection mode to run. Defaults to every configured mode.",
     )
@@ -366,11 +337,7 @@ def main():
     run_id = utc_now_iso()
     results = []
 
-    selected_sources = (
-        ["reddit", "youtube", "manual_csv"]
-        if args.source == "all"
-        else [args.source]
-    )
+    selected_sources = ["reddit", "youtube"] if args.source == "all" else [args.source]
 
     for source in selected_sources:
         source_config = config["collectors"].get(source, {})
@@ -381,8 +348,6 @@ def main():
             run_reddit(config, args, registry, results, run_id)
         elif source == "youtube":
             run_youtube(config, args, registry, results, run_id)
-        elif source == "manual_csv":
-            run_manual_csv(config, args, registry, results, run_id)
 
     summary_path, summary = save_summary(
         run_id, results, project_path(config["run"]["registry_path"])

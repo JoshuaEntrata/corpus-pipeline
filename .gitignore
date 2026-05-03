@@ -221,3 +221,5 @@ __marimo__/
 data/processed/normalized_text_rows_*.csv
 logs/collectors/run_summary_*.json
 logs/preprocessing/preprocessing_summary_*.json
+data/classified/ai_healthcare_classified_*.csv
+logs/classification/classification_summary_*.json

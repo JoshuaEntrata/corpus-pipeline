@@ -1,7 +1,6 @@
 import pandas as pd
 import os
 import csv
-import hashlib
 import json
 import time
 import logging
@@ -25,7 +24,11 @@ load_dotenv()
 
 # Get project root directory
 project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 print(f"Project root: {project_root}")
+
+from src.contracts import RAW_COLLECTION_FIELDS
 
 # Setup logging
 log_dir = project_root / "logs" / "collectors"
@@ -56,25 +59,7 @@ def set_csv_field_size_limit():
 
 set_csv_field_size_limit()
 
-RAW_FIELDNAMES = [
-    "run_id",
-    "source_platform",
-    "source_item_id",
-    "source_url",
-    "collection_method",
-    "collection_query",
-    "collected_at_utc",
-    "created_at_utc",
-    "author_id_hash",
-    "title",
-    "body_text",
-    "description",
-    "transcript",
-    "comments_json",
-    "engagement_json",
-    "raw_json",
-    "manual_file_name",
-]
+RAW_FIELDNAMES = RAW_COLLECTION_FIELDS
 
 print(f"Output CSV: {output_csv}")
 print(f"Error log: {error_log_path}")
@@ -141,20 +126,10 @@ class YouTubeClient:
                         {
                             "source_item_id": comment_id,
                             "parent_item_id": video_id,
-                            "conversation_root_id": video_id,
-                            "source_url": f"https://www.youtube.com/watch?v={video_id}&lc={comment_id}",
-                            "author_id_hash": hash_identifier(
-                                comment.get("authorChannelId", {}).get("value")
-                                or comment.get("authorDisplayName")
-                            ),
                             "body": comment.get("textDisplay", ""),
                             "created_at_utc": normalize_youtube_timestamp(
                                 comment.get("publishedAt", "")
                             ),
-                            "updated_at_utc": normalize_youtube_timestamp(
-                                comment.get("updatedAt", "")
-                            ),
-                            "like_count": comment.get("likeCount"),
                             "is_reply": False,
                         }
                     )
@@ -170,22 +145,10 @@ class YouTubeClient:
                                     "parent_item_id": reply_snippet.get(
                                         "parentId", comment_id
                                     ),
-                                    "conversation_root_id": video_id,
-                                    "source_url": f"https://www.youtube.com/watch?v={video_id}&lc={reply_id}",
-                                    "author_id_hash": hash_identifier(
-                                        reply_snippet.get("authorChannelId", {}).get(
-                                            "value"
-                                        )
-                                        or reply_snippet.get("authorDisplayName")
-                                    ),
                                     "body": reply_snippet.get("textDisplay", ""),
                                     "created_at_utc": normalize_youtube_timestamp(
                                         reply_snippet.get("publishedAt", "")
                                     ),
-                                    "updated_at_utc": normalize_youtube_timestamp(
-                                        reply_snippet.get("updatedAt", "")
-                                    ),
-                                    "like_count": reply_snippet.get("likeCount"),
                                     "is_reply": True,
                                 }
                             )
@@ -267,64 +230,56 @@ def normalize_youtube_timestamp(timestamp):
         return None
 
 
-def hash_identifier(value):
-    """Hash author/channel identifiers instead of storing raw usernames."""
-    if not value or value == "[deleted]":
-        return None
+def normalize_comment_record(comment, root_id):
+    parent_item_id = comment.get("parent_item_id") or comment.get("parent_id")
+    created_at_utc = comment.get("created_at_utc") or normalize_youtube_timestamp(
+        comment.get("created_utc")
+    )
+    is_reply = comment.get("is_reply")
+    if is_reply is None:
+        is_reply = parent_item_id not in (None, root_id)
 
-    salt = os.getenv("AUTHOR_HASH_SALT", "")
-    payload = f"{salt}:{value}".encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
+    return {
+        "source_item_id": comment.get("source_item_id") or comment.get("id"),
+        "parent_item_id": parent_item_id,
+        "body": clean_text(comment.get("body")),
+        "created_at_utc": created_at_utc,
+        "is_reply": is_reply,
+    }
+
+
+def load_comment_records(row):
+    comments_value = row.get("comments_json") or row.get("comments") or "[]"
+    try:
+        comments = json.loads(comments_value)
+    except (TypeError, json.JSONDecodeError):
+        comments = []
+
+    root_id = row.get("source_item_id") or row.get("id")
+    return [
+        normalize_comment_record(comment, root_id)
+        for comment in comments
+        if isinstance(comment, dict)
+    ]
 
 
 def migrate_legacy_record(row):
-    """Map the first scraper CSV shape into the raw collection schema."""
-    author = row.get("author")
-    comments = []
-    try:
-        legacy_comments = json.loads(row.get("comments") or "[]")
-    except json.JSONDecodeError:
-        legacy_comments = []
-
-    for comment in legacy_comments:
-        comments.append(
-            {
-                "source_item_id": comment.get("id"),
-                "parent_item_id": comment.get("parent_id"),
-                "conversation_root_id": row.get("id") or None,
-                "author_id_hash": hash_identifier(comment.get("author")),
-                "body": clean_text(comment.get("body")),
-                "created_at_utc": normalize_youtube_timestamp(
-                    comment.get("created_utc")
-                ),
-                "is_reply": comment.get("is_reply"),
-            }
-        )
-
-    legacy_raw = dict(row)
-    legacy_raw.pop("author", None)
-    legacy_raw.pop("comments", None)
-    legacy_raw["author_id_hash"] = hash_identifier(author)
-    legacy_raw["comments_json"] = comments
+    """Map older YouTube scraper CSV shapes into the compact raw schema."""
+    source_item_id = row.get("source_item_id") or row.get("id")
+    comments = load_comment_records(row)
 
     return {
-        "run_id": "legacy",
-        "source_platform": "youtube",
-        "source_item_id": row.get("id"),
-        "source_url": row.get("url"),
-        "collection_method": "legacy",
-        "collection_query": None,
-        "collected_at_utc": None,
-        "created_at_utc": normalize_youtube_timestamp(row.get("created_utc")),
-        "author_id_hash": hash_identifier(author),
+        "source_platform": row.get("source_platform") or "youtube",
+        "source_item_id": source_item_id,
+        "source_url": row.get("source_url") or row.get("url"),
+        "collection_method": row.get("collection_method") or "legacy",
+        "created_at_utc": row.get("created_at_utc")
+        or normalize_youtube_timestamp(row.get("created_utc")),
         "title": clean_text(row.get("title")),
-        "body_text": None,
+        "body_text": clean_text(row.get("body_text")),
         "description": clean_text(row.get("description")),
-        "transcript": None,
+        "transcript": clean_text(row.get("transcript")),
         "comments_json": json_dumps(comments),
-        "engagement_json": json_dumps({}),
-        "raw_json": json_dumps(legacy_raw),
-        "manual_file_name": None,
     }
 
 
@@ -379,7 +334,7 @@ def video_exists(video_id):
 
 
 def save_video(
-    video_id, video_data, collection_method, collection_query, run_id, youtube_client
+    video_id, video_data, collection_method, _collection_query, _run_id, youtube_client
 ):
     """Save a single video to CSV."""
     try:
@@ -387,41 +342,22 @@ def save_video(
         snippet = video_data["snippet"]
         created_at_utc = normalize_youtube_timestamp(snippet.get("publishedAt", ""))
         video_url = f"https://www.youtube.com/watch?v={video_id}"
-        engagement = video_data.get("statistics", {})
 
         # Get comments
         comments = youtube_client.get_comments(video_id, max_results=100)
         comments_json = json_dumps(comments)
-        raw_item = {
-            "id": video_id,
-            "title": clean_text(snippet.get("title", "")),
-            "description": clean_text(snippet.get("description", "")),
-            "channel_id": snippet.get("channelId"),
-            "published_at": created_at_utc,
-            "url": video_url,
-            "engagement": engagement,
-        }
 
         record = {
-            "run_id": run_id,
             "source_platform": "youtube",
             "source_item_id": video_id,
             "source_url": video_url,
             "collection_method": collection_method,
-            "collection_query": collection_query,
-            "collected_at_utc": utc_now_iso(),
             "created_at_utc": created_at_utc,
-            "author_id_hash": hash_identifier(
-                snippet.get("channelId") or snippet.get("channelTitle")
-            ),
             "title": clean_text(snippet.get("title", "")),
             "body_text": None,
             "description": clean_text(snippet.get("description", "")),
             "transcript": None,
             "comments_json": comments_json,
-            "engagement_json": json_dumps(engagement),
-            "raw_json": json_dumps(raw_item),
-            "manual_file_name": None,
         }
 
         # Append to CSV

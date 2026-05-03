@@ -1,6 +1,5 @@
 import csv
 import hashlib
-import json
 import re
 import sys
 from pathlib import Path
@@ -69,16 +68,20 @@ def hash_value(value):
 
 def stable_text_item_id(source_platform, source_item_id, text_type, text_hash):
     value = f"{source_platform}|{source_item_id}|{text_type}|{text_hash}"
-    return hash_value(value)
+    return hash_value(value)[:24]
+
+
+def iter_raw_csv(path):
+    path = Path(path)
+    if not path.exists():
+        return
+
+    with open(path, "r", newline="", encoding="utf-8") as f:
+        yield from csv.DictReader(f)
 
 
 def load_raw_csv(path):
-    path = Path(path)
-    if not path.exists():
-        return []
-
-    with open(path, "r", newline="", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
+    return list(iter_raw_csv(path))
 
 
 def load_keyword_terms(path=None):
@@ -126,47 +129,29 @@ def normalize_item(item, raw_record, seen_text_hashes, ai_terms, health_terms, m
     is_too_short = len(cleaned) < min_chars
     has_ai_keyword = contains_term(cleaned, ai_terms) if cleaned else False
     has_health_keyword = contains_term(cleaned, health_terms) if cleaned else False
-    needs_language_detection = not is_empty_text and not is_too_short
+    needs_language_detection = (
+        not is_empty_text and not is_too_short and not is_duplicate_text
+    )
     needs_classification = needs_language_detection
 
-    metadata = item.get("metadata") or {}
-    metadata.update(
-        {
-            "raw_source_item_id": raw_record.get("source_item_id"),
-            "raw_source_platform": raw_record.get("source_platform"),
-        }
-    )
-
     return {
-        "text_item_id": stable_text_item_id(
+        "source_platform": item.get("source_platform"),
+        "id": stable_text_item_id(
             item.get("source_platform"),
             item.get("source_item_id"),
             item.get("text_type"),
             text_hash,
         ),
-        "run_id": raw_record.get("run_id"),
-        "source_platform": item.get("source_platform"),
-        "source_item_id": item.get("source_item_id"),
-        "conversation_root_id": item.get("conversation_root_id"),
-        "parent_item_id": item.get("parent_item_id"),
-        "text_type": item.get("text_type"),
-        "raw_text": raw_text,
-        "clean_text": cleaned,
-        "source_url": item.get("source_url"),
-        "created_at_utc": item.get("created_at_utc"),
-        "collected_at_utc": raw_record.get("collected_at_utc"),
-        "collection_method": raw_record.get("collection_method"),
-        "collection_query": raw_record.get("collection_query"),
-        "author_id_hash": item.get("author_id_hash"),
-        "is_duplicate_text": is_duplicate_text,
-        "is_empty_text": is_empty_text,
-        "is_too_short": is_too_short,
+        "preprocessed_text": cleaned,
+        "collection_method": item.get("collection_method")
+        or raw_record.get("collection_method"),
         "has_ai_keyword": has_ai_keyword,
         "has_health_keyword": has_health_keyword,
         "needs_classification": needs_classification,
         "needs_language_detection": needs_language_detection,
-        "text_hash": text_hash,
-        "metadata_json": json.dumps(metadata, ensure_ascii=False),
+        "_is_duplicate_text": is_duplicate_text,
+        "_is_empty_text": is_empty_text,
+        "_is_too_short": is_too_short,
     }
 
 
@@ -198,29 +183,50 @@ def normalize_raw_files(
     keywords_path=None,
     min_chars=15,
     source_filter=None,
+    batch_size=1000,
 ):
     ai_terms, health_terms = load_keyword_terms(keywords_path)
-    raw_records = []
+    seen_text_hashes = set()
+    batch = []
+    input_record_count = 0
+    normalized_row_count = 0
+    duplicate_text_count = 0
+    empty_text_count = 0
+    too_short_count = 0
 
     for input_path in input_paths:
-        for record in load_raw_csv(input_path):
+        for record in iter_raw_csv(input_path):
             if source_filter and source_filter != "all":
                 if record.get("source_platform") != source_filter:
                     continue
-            raw_records.append(record)
+            input_record_count += 1
 
-    rows = normalize_raw_records(
-        raw_records,
-        ai_terms=ai_terms,
-        health_terms=health_terms,
-        min_chars=min_chars,
-    )
-    append_csv_rows(output_path, rows, NORMALIZED_TEXT_ROW_FIELDS)
+            for item in explode_raw_record(record):
+                row = normalize_item(
+                    item,
+                    record,
+                    seen_text_hashes,
+                    ai_terms,
+                    health_terms,
+                    min_chars,
+                )
+                normalized_row_count += 1
+                duplicate_text_count += 1 if row["_is_duplicate_text"] else 0
+                empty_text_count += 1 if row["_is_empty_text"] else 0
+                too_short_count += 1 if row["_is_too_short"] else 0
+                batch.append(row)
+
+                if len(batch) >= batch_size:
+                    append_csv_rows(output_path, batch, NORMALIZED_TEXT_ROW_FIELDS)
+                    batch.clear()
+
+    append_csv_rows(output_path, batch, NORMALIZED_TEXT_ROW_FIELDS)
+
     return {
-        "input_record_count": len(raw_records),
-        "normalized_row_count": len(rows),
-        "duplicate_text_count": sum(1 for row in rows if row["is_duplicate_text"]),
-        "empty_text_count": sum(1 for row in rows if row["is_empty_text"]),
-        "too_short_count": sum(1 for row in rows if row["is_too_short"]),
+        "input_record_count": input_record_count,
+        "normalized_row_count": normalized_row_count,
+        "duplicate_text_count": duplicate_text_count,
+        "empty_text_count": empty_text_count,
+        "too_short_count": too_short_count,
         "output_path": str(output_path),
     }
