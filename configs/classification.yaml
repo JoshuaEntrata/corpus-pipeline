@@ -1,0 +1,15 @@
+input_folder: data/processed
+output_folder: data/classified
+keywords_path: configs/keywords.yaml
+
+classifier:
+  version: ai_healthcare_classifier_v1
+  model: gpt-4o-mini
+  use_model: false
+  classify_likely_relevant_with_model: true
+  max_model_calls: 100
+  input_usd_per_1m_tokens: 0.15
+  output_usd_per_1m_tokens: 0.60
+
+prefilter:
+  min_chars: 15
