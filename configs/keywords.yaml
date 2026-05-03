@@ -2,14 +2,43 @@ ai_terms:
   english:
     - ai
     - artificial intelligence
+    - openai
+    - chatgpt
+    - gpt
+    - gpt-4
+    - gpt-4o
+    - llm
+    - large language model
+    - generative ai
+    - anthropic
+    - claude
+    - gemini
+    - deepmind
+    - llama
+    - copilot
+    - openevidence
+    - open evidence
+    - med-palm
+    - medpalm
+    - medical ai
+    - clinical ai
     - machine learning
     - deep learning
     - neural network
-    - chatgpt
     - chatbot
     - algorithm
-    - llm
-    - generative ai
+    - natural language processing
+    - nlp
+    - decision support
+    - clinical decision support
+    - automation
+    - automated
+    - ai scribe
+    - ambient scribe
+    - speech recognition
+    - computer vision
+    - predictive analytics
+    - predictive model
   filipino_common:
     - ai
     - artificial intelligence
@@ -35,6 +64,57 @@ health_terms:
     - symptoms
     - public health
     - mental health
+    - radiology
+    - pharmacy
+    - surgery
+    - clinical
+    - health records
+    - electronic medical record
+    - electronic health record
+    - medical record
+    - emr
+    - ehr
+    - telehealth
+    - telemedicine
+    - triage
+    - emergency room
+    - er
+    - icu
+    - laboratory
+    - lab results
+    - blood test
+    - vital signs
+    - blood pressure
+    - glucose
+    - insulin
+    - vaccine
+    - vaccination
+    - infection
+    - sepsis
+    - cancer
+    - tumor
+    - oncology
+    - chemotherapy
+    - radiotherapy
+    - biopsy
+    - screening
+    - diabetes
+    - hypertension
+    - heart disease
+    - stroke
+    - asthma
+    - copd
+    - kidney disease
+    - alzheimer
+    - dementia
+    - depression
+    - anxiety
+    - pregnancy
+    - maternal health
+    - cardiology
+    - neurology
+    - pathology
+    - dermatology
   filipino_common:
     - kalusugan
     - pangkalusugan
@@ -48,6 +128,25 @@ health_terms:
     - lunas
     - nars
     - klinika
+    - konsultasyon
+    - bakuna
+    - impeksyon
+    - kanser
+    - diyabetis
+    - altapresyon
+    - alta presyon
+    - presyon
+    - pagbubuntis
     - panglawas
     - tambal
-
+    - kahimsog
+    - pagtambal
+    - hilanat
+    - salun-at
+    - pasiente
+    - agas
+    - panangagas
+    - balatian
+    - bulong
+    - pagbulong
+    - pagbusong

@@ -1,6 +1,7 @@
 import argparse
 import csv
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,6 +11,14 @@ from tqdm import tqdm
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:
+    load_dotenv = None
+
+if load_dotenv is not None:
+    load_dotenv(PROJECT_ROOT / ".env")
 
 from src.classification.ai_healthcare_classifier import (
     AIHealthcareClassifier,
@@ -32,7 +41,7 @@ DEFAULT_CONFIG = {
     "classifier": {
         "version": CLASSIFIER_VERSION,
         "model": "gpt-4o-mini",
-        "use_model": False,
+        "use_model": True,
         "classify_likely_relevant_with_model": True,
         "max_model_calls": 100,
         "input_usd_per_1m_tokens": 0.15,
@@ -131,6 +140,20 @@ def float_arg(value, default=0.0):
         return default
 
 
+def require_openai_environment(use_model, verify_prefilter_valid_with_model):
+    if not use_model or not verify_prefilter_valid_with_model:
+        return
+
+    if not os.getenv("OPENAI_API_KEY"):
+        raise SystemExit(
+            "OpenAI verification is enabled, but OPENAI_API_KEY is not set.\n"
+            "Set it for this PowerShell session with:\n"
+            "  $env:OPENAI_API_KEY='your_api_key_here'\n"
+            "Or run without model verification:\n"
+            "  python -m src.orchestration.run_classification --prefilter-only"
+        )
+
+
 def int_arg(value, default=0):
     if value in (None, ""):
         return default
@@ -197,6 +220,7 @@ def run_classification(
     use_model=False,
     model=None,
     max_model_calls=100,
+    verify_prefilter_valid_with_model=True,
     min_chars=15,
     input_usd_per_1m_tokens=0.15,
     output_usd_per_1m_tokens=0.60,
@@ -206,7 +230,11 @@ def run_classification(
 ):
     ai_terms, health_terms = parse_keyword_config(keywords_path)
     existing_texts = read_existing_texts(output_path)
-    classifier = AIHealthcareClassifier(model=model) if use_model else None
+    classifier = (
+        AIHealthcareClassifier(model=model)
+        if use_model and verify_prefilter_valid_with_model
+        else None
+    )
     total_rows = count_rows(input_path, limit)
 
     output_rows = []
@@ -214,7 +242,11 @@ def run_classification(
     classified_count = 0
     skipped_existing = 0
     skipped_empty = 0
+    prefilter_valid_candidate_count = 0
     model_calls = 0
+    model_verification_count = 0
+    model_verification_confirmed_count = 0
+    model_verification_downgraded_count = 0
     model_input_tokens = 0
     model_output_tokens = 0
     model_total_tokens = 0
@@ -254,9 +286,13 @@ def run_classification(
                 ai_terms=ai_terms,
                 health_terms=health_terms,
             )
+            prefilter_marked_valid = prefilter["label"] == "valid_ai_healthcare"
+            if prefilter_marked_valid:
+                prefilter_valid_candidate_count += 1
             should_use_model = (
                 use_model
-                and prefilter["needs_model"]
+                and verify_prefilter_valid_with_model
+                and prefilter_marked_valid
                 and model_calls < max_model_calls
             )
             if should_use_model:
@@ -266,6 +302,7 @@ def run_classification(
                 text, prefilter, should_use_model, classifier
             )
             if should_use_model:
+                model_verification_count += 1
                 model_input_tokens += int_arg(usage.get("input_tokens"))
                 model_output_tokens += int_arg(usage.get("output_tokens"))
                 model_total_tokens += int_arg(usage.get("total_tokens"))
@@ -274,6 +311,10 @@ def run_classification(
                     input_usd_per_1m_tokens,
                     output_usd_per_1m_tokens,
                 )
+                if classified["ai_healthcare_label"] == "valid_ai_healthcare":
+                    model_verification_confirmed_count += 1
+                else:
+                    model_verification_downgraded_count += 1
             output_rows.append(classified)
             existing_texts.add(text)
             classified_count += 1
@@ -312,8 +353,13 @@ def run_classification(
         "classified_count": classified_count,
         "skipped_existing_count": skipped_existing,
         "skipped_empty_text_count": skipped_empty,
+        "prefilter_valid_candidate_count": prefilter_valid_candidate_count,
         "model_call_count": model_calls,
+        "model_verification_count": model_verification_count,
+        "model_verification_confirmed_count": model_verification_confirmed_count,
+        "model_verification_downgraded_count": model_verification_downgraded_count,
         "use_model": use_model,
+        "verify_prefilter_valid_with_model": verify_prefilter_valid_with_model,
         "model_name": model if use_model else None,
         "model_input_token_count": model_input_tokens,
         "model_output_token_count": model_output_tokens,
@@ -351,7 +397,12 @@ def main():
     parser.add_argument(
         "--use-model",
         action="store_true",
-        help="Call OpenAI for likely relevant rows. Defaults to prefilter only.",
+        help="Call OpenAI to verify prefilter-valid rows.",
+    )
+    parser.add_argument(
+        "--prefilter-only",
+        action="store_true",
+        help="Disable OpenAI verification and use only the local prefilter.",
     )
     parser.add_argument("--model", help="OpenAI model override.")
     parser.add_argument(
@@ -389,7 +440,14 @@ def main():
 
     output_path = project_path(args.output) if args.output else default_output_path(run_id)
     keywords_path = project_path(args.keywords or config["keywords_path"])
-    use_model = args.use_model or bool_arg(classifier_config.get("use_model"))
+    use_model = (
+        False
+        if args.prefilter_only
+        else args.use_model or bool_arg(classifier_config.get("use_model"))
+    )
+    verify_prefilter_valid_with_model = bool_arg(
+        classifier_config.get("classify_likely_relevant_with_model")
+    )
     model = args.model or classifier_config.get("model")
     max_model_calls = (
         args.max_model_calls
@@ -407,6 +465,7 @@ def main():
         if args.output_usd_per_1m_tokens is not None
         else float_arg(classifier_config.get("output_usd_per_1m_tokens"))
     )
+    require_openai_environment(use_model, verify_prefilter_valid_with_model)
 
     summary = run_classification(
         input_path=input_path,
@@ -415,6 +474,7 @@ def main():
         use_model=use_model,
         model=model,
         max_model_calls=max_model_calls,
+        verify_prefilter_valid_with_model=verify_prefilter_valid_with_model,
         min_chars=min_chars,
         input_usd_per_1m_tokens=input_usd_per_1m_tokens,
         output_usd_per_1m_tokens=output_usd_per_1m_tokens,

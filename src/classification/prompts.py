@@ -1,6 +1,8 @@
 CLASSIFIER_VERSION = "ai_healthcare_classifier_v1"
 
 SYSTEM_PROMPT = """You classify standalone social-media text for an AI-in-healthcare data pipeline.
+You may be used as a second-pass verifier after a keyword prefilter marks text as likely valid.
+Verify from the text itself whether it truly connects AI and healthcare; if not, return the correct invalid label.
 
 Rules:
 1. Classify only the provided text.

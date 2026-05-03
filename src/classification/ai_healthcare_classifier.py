@@ -1,5 +1,14 @@
 import json
 import os
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:
+    load_dotenv = None
+
+if load_dotenv is not None:
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 from src.classification.prompts import (
     CLASSIFICATION_SCHEMA,
@@ -87,4 +96,3 @@ class AIHealthcareClassifier:
         result["classifier_version"] = CLASSIFIER_VERSION
         result["usage"] = usage_to_dict(response)
         return result
-
