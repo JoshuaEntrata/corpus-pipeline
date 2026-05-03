@@ -1,0 +1,10 @@
+requests
+python-dotenv
+tqdm
+numpy
+pandas
+regex
+praw
+prawcore
+openai
+google-api-python-client
