@@ -8,3 +8,4 @@ praw
 prawcore
 openai
 google-api-python-client
+pyyaml

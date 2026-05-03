@@ -1,22 +1,37 @@
 import argparse
+import importlib
 import pandas as pd
 from pathlib import Path
 from dotenv import load_dotenv
-from reddit_praw import (
-    scrape_by_submission_id,
-    scrape_by_subreddits_keywords,
-    scrape_by_keywords as scrape_reddit_by_keywords,
-)
-from youtube_data import (
-    scrape_by_video_id,
-    scrape_by_keywords as scrape_youtube_by_keywords,
-)
+
+
+class BaseCollector:
+    source_platform = None
+
+    def collect_targeted(self, ids):
+        raise NotImplementedError
+
+    def collect_by_keywords(self, keywords):
+        raise NotImplementedError
+
+    def normalize_raw_item(self, item):
+        raise NotImplementedError
+
+    def save_raw(self, items, run_id):
+        raise NotImplementedError
+
 
 # Setup
 load_dotenv()
 
 # Get project root directory
 project_root = Path(__file__).parent.parent.parent
+
+
+def load_collector_module(module_name):
+    if __package__:
+        return importlib.import_module(f".{module_name}", package=__package__)
+    return importlib.import_module(module_name)
 
 
 def main():
@@ -124,8 +139,9 @@ def main():
         args.youtube_scrape_by_keywords = True
 
     # Scrape by Reddit submission IDs
-    if args.youtube_scrape_by_keywords:
-        collected, skipped, failed = scrape_by_submission_id(
+    if args.reddit_scrape_by_id:
+        reddit_praw = load_collector_module("reddit_praw")
+        collected, skipped, failed = reddit_praw.scrape_by_submission_id(
             reddit_post_ids, rate_limit_sec=args.rate_limit
         )
         total_collected += collected
@@ -134,7 +150,8 @@ def main():
 
     # Scrape by subreddits + keywords
     if args.reddit_scrape_by_subreddits_and_keywords:
-        collected, skipped, failed = scrape_by_subreddits_keywords(
+        reddit_praw = load_collector_module("reddit_praw")
+        collected, skipped, failed = reddit_praw.scrape_by_subreddits_keywords(
             subreddits,
             keywords,
             limit_per_query=args.limit,
@@ -146,7 +163,8 @@ def main():
 
     # Scrape by keywords (all subreddits)
     if args.reddit_scrape_by_keywords:
-        collected, skipped, failed = scrape_reddit_by_keywords(
+        reddit_praw = load_collector_module("reddit_praw")
+        collected, skipped, failed = reddit_praw.scrape_by_keywords(
             keywords, limit_per_query=args.limit, rate_limit_sec=args.rate_limit
         )
         total_collected += collected
@@ -154,7 +172,8 @@ def main():
         total_failed += failed
 
     if args.youtube_scrape_by_id:
-        collected, skipped, failed = scrape_by_video_id(
+        youtube_data = load_collector_module("youtube_data")
+        collected, skipped, failed = youtube_data.scrape_by_video_id(
             youtube_post_ids, rate_limit_sec=args.rate_limit
         )
         total_collected += collected
@@ -163,7 +182,8 @@ def main():
 
     # Scrape by keywords (all Youtube videos)
     if args.youtube_scrape_by_keywords:
-        collected, skipped, failed = scrape_youtube_by_keywords(
+        youtube_data = load_collector_module("youtube_data")
+        collected, skipped, failed = youtube_data.scrape_by_keywords(
             keywords, limit_per_query=args.limit, rate_limit_sec=args.rate_limit
         )
         total_collected += collected
