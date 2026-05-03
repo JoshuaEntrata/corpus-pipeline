@@ -85,9 +85,6 @@ def main():
 
     args = parser.parse_args()
 
-    # Load input data
-    print(f"\nLoading input data from {project_root}...\n")
-
     keywords_df = pd.read_csv(
         project_root / "src" / "collectors" / "inputs" / "keywords.csv"
     )
@@ -105,11 +102,6 @@ def main():
     subreddits = subreddits_df["subreddit"].tolist()
     reddit_post_ids = reddit_post_ids_df["post_id"].tolist()
     youtube_post_ids = youtube_post_ids_df["video_id"].tolist()
-
-    print(f"Loaded {len(keywords)} keywords")
-    print(f"Loaded {len(subreddits)} subreddits")
-    print(f"Loaded {len(reddit_post_ids)} Reddit post IDs\n")
-    print(f"Loaded {len(youtube_post_ids)} Youtube post IDs\n")
 
     # Track total results
     total_collected = 0
@@ -190,14 +182,12 @@ def main():
         total_skipped += skipped
         total_failed += failed
 
-    # Final summary
-    print(f"\n{'='*60}")
-    print(f"OVERALL SUMMARY")
-    print(f"{'='*60}")
-    print(f"Total Collected: {total_collected}")
-    print(f"Total Skipped:   {total_skipped}")
-    print(f"Total Failed:    {total_failed}")
-    print(f"{'='*60}\n")
+    print(
+        "Collectors done - "
+        f"scraped: {total_collected} | "
+        f"skipped: {total_skipped} | "
+        f"failed: {total_failed}"
+    )
 
 
 if __name__ == "__main__":

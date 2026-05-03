@@ -1,29 +1,27 @@
-import pandas as pd
-import praw
-import os
 import csv
 import json
-import time
 import logging
+import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+import pandas as pd
+import praw
+from dotenv import load_dotenv
 from tqdm import tqdm
 
-from dotenv import load_dotenv
 
-# Setup
 load_dotenv()
 
-# Get project root directory
 project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
-print(f"Project root: {project_root}")
 
 from src.contracts import RAW_COLLECTION_FIELDS
 
-# Setup logging
+
 log_dir = project_root / "logs" / "collectors"
 log_dir.mkdir(parents=True, exist_ok=True)
 error_log_path = log_dir / "reddit_scrape_errors.log"
@@ -34,10 +32,11 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
-# Setup output CSV path
 output_dir = project_root / "data" / "raw"
 output_dir.mkdir(parents=True, exist_ok=True)
 output_csv = output_dir / "reddit_scraped.csv"
+
+RAW_FIELDNAMES = RAW_COLLECTION_FIELDS
 
 
 def set_csv_field_size_limit():
@@ -52,13 +51,7 @@ def set_csv_field_size_limit():
 
 set_csv_field_size_limit()
 
-RAW_FIELDNAMES = RAW_COLLECTION_FIELDS
 
-print(f"Output CSV: {output_csv}")
-print(f"Error log: {error_log_path}")
-
-
-# Reddit Client
 class RedditClient:
     def __init__(self, config):
         self.config = config
@@ -70,8 +63,7 @@ class RedditClient:
         self.reddit.read_only = True
 
     def get_subreddit(self, subreddit_name):
-        subreddit = self.reddit.subreddit(subreddit_name)
-        return subreddit
+        return self.reddit.subreddit(subreddit_name)
 
     def search(self, subreddit, keyword, limit=None):
         return subreddit.search(
@@ -79,8 +71,7 @@ class RedditClient:
         )
 
     def get_submission(self, post_id):
-        submission = self.reddit.submission(id=post_id)
-        return submission
+        return self.reddit.submission(id=post_id)
 
 
 _client = None
@@ -110,16 +101,11 @@ def get_client():
     return _client
 
 
-# Helper Functions
 def clean_text(text):
-    """Clean text by replacing newlines and extra spaces with single space."""
     if not text:
         return text
-    # Replace newlines and tabs with spaces
     text = text.replace("\n", " ").replace("\r", " ").replace("\t", " ")
-    # Replace multiple spaces with single space
-    text = " ".join(text.split())
-    return text
+    return " ".join(text.split())
 
 
 def json_dumps(value):
@@ -148,6 +134,26 @@ def strip_reddit_kind(value):
     if not value:
         return None
     return value.split("_", 1)[1] if "_" in value else value
+
+
+def log_scrape_start(platform, mode, total, unit):
+    tqdm.write(f"{platform} | {mode} | total={total} {unit}")
+
+
+def log_scrape_done(platform, mode, progress, total, collected, skipped, failed):
+    tqdm.write(
+        f"{platform} | {mode} | progress={progress}/{total} | "
+        f"scraped={collected} | skipped={skipped} | failed={failed}"
+    )
+
+
+def update_progress(progress, collected, skipped, failed):
+    progress.set_postfix(
+        scraped=collected,
+        skipped=skipped,
+        failed=failed,
+        refresh=False,
+    )
 
 
 def normalize_comment_record(comment, root_id):
@@ -224,7 +230,8 @@ def ensure_output_csv():
         rows = list(csv.DictReader(f))
 
     backup_path = output_csv.with_name(
-        f"{output_csv.stem}_legacy_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}{output_csv.suffix}"
+        f"{output_csv.stem}_legacy_"
+        f"{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}{output_csv.suffix}"
     )
     output_csv.replace(backup_path)
 
@@ -234,11 +241,10 @@ def ensure_output_csv():
         for row in rows:
             writer.writerow(migrate_legacy_record(row))
 
-    print(f"Migrated legacy Reddit CSV to schema. Backup: {backup_path}")
+    tqdm.write(f"reddit | migrate_schema | backup={backup_path}")
 
 
 def submission_exists(submission_id):
-    """Check if submission ID already exists in the CSV."""
     if not output_csv.exists():
         return False
 
@@ -251,12 +257,11 @@ def submission_exists(submission_id):
                     return True
         return False
     except Exception as e:
-        logging.error(f"Error checking if submission exists: {e}")
+        logging.error(f"reddit duplicate check failed: {e}")
         return False
 
 
 def get_comments_data(submission):
-    """Extract all comments from a submission."""
     try:
         submission.comments.replace_more(limit=None)
         comments_list = []
@@ -275,15 +280,13 @@ def get_comments_data(submission):
 
         return json_dumps(comments_list)
     except Exception as e:
-        logging.error(f"Error getting comments for submission {submission.id}: {e}")
+        logging.error(f"reddit comment scrape failed: {e}")
         return json_dumps([])
 
 
 def save_submission(submission, collection_method, _collection_query=None, _run_id=None):
-    """Save a single submission to CSV."""
     try:
         ensure_output_csv()
-        comments_json = get_comments_data(submission)
         reddit_url = f"https://www.reddit.com{submission.permalink}"
         record = {
             "source_platform": "reddit",
@@ -295,101 +298,82 @@ def save_submission(submission, collection_method, _collection_query=None, _run_
             "body_text": clean_text(submission.selftext),
             "description": None,
             "transcript": None,
-            "comments_json": comments_json,
+            "comments_json": get_comments_data(submission),
         }
 
-        # Append to CSV
         with open(output_csv, "a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=RAW_FIELDNAMES)
             writer.writerow(record)
 
-        print(f"Saved: {submission.id} ({collection_method})")
         return True
     except Exception as e:
-        error_msg = f"Error saving submission {submission.id}: {str(e)}"
-        logging.error(error_msg)
+        logging.error(f"reddit {collection_method} save failed: {str(e)}")
         return False
 
 
-# Scraping Functions
 def scrape_by_submission_id(submission_ids, rate_limit_sec=2, run_id=None):
-    """
-    Scrape targeted submissions by their IDs.
-
-    Args:
-        submission_ids: list of Reddit submission IDs
-        rate_limit_sec: delay between requests in seconds
-    """
-    print(f"\n{'='*60}")
-    print(f"SCRAPING BY SUBMISSION ID")
-    print(f"Total to process: {len(submission_ids)}")
-    print(f"{'='*60}")
-
+    """Scrape targeted submissions by their IDs."""
     collected = 0
     skipped = 0
     failed = 0
     run_id = run_id or utc_now_iso()
     ensure_output_csv()
     reddit_client = get_client()
+    total = len(submission_ids)
+    log_scrape_start("reddit", "targeted_id", total, "posts")
 
-    for sub_id in tqdm(submission_ids, desc="Processing submissions", unit="post"):
-        # Check if already exists
-        if submission_exists(sub_id):
-            skipped += 1
-            time.sleep(rate_limit_sec)
-            continue
-
-        try:
-            submission = reddit_client.get_submission(sub_id)
-            if save_submission(submission, "targeted_id", sub_id, run_id):
-                collected += 1
+    with tqdm(total=total, desc="reddit targeted_id", unit="post") as progress:
+        for sub_id in submission_ids:
+            if submission_exists(sub_id):
+                skipped += 1
             else:
-                failed += 1
+                try:
+                    submission = reddit_client.get_submission(sub_id)
+                    if save_submission(submission, "targeted_id", sub_id, run_id):
+                        collected += 1
+                    else:
+                        failed += 1
+                except Exception as e:
+                    logging.error(f"reddit targeted_id fetch failed: {str(e)}")
+                    failed += 1
 
-        except Exception as e:
-            logging.error(f"Error fetching submission {sub_id}: {str(e)}")
-            failed += 1
+            time.sleep(rate_limit_sec)
+            progress.update(1)
+            update_progress(progress, collected, skipped, failed)
 
-        time.sleep(rate_limit_sec)
-
-    print(f"\n{'='*60}")
-    print(f"RESULTS - Collected: {collected} | Skipped: {skipped} | Failed: {failed}")
-    print(f"{'='*60}\n")
+    log_scrape_done("reddit", "targeted_id", total, total, collected, skipped, failed)
     return collected, skipped, failed
 
 
 def scrape_by_subreddits_keywords(
     subreddits_list, keywords_list, limit_per_query=10, rate_limit_sec=2, run_id=None
 ):
-    """
-    Search keywords across all subreddits.
-
-    Args:
-        subreddits_list: list of subreddit names
-        keywords_list: list of keywords to search
-        limit_per_query: number of results per keyword search
-        rate_limit_sec: delay between requests
-    """
-    print(f"\n{'='*60}")
-    print(f"SCRAPING BY SUBREDDITS + KEYWORDS")
-    print(f"Subreddits: {', '.join(subreddits_list)}")
-    print(f"Keywords: {', '.join(keywords_list)}")
-    print(f"{'='*60}")
-
+    """Search keywords across configured subreddits."""
     collected = 0
     skipped = 0
     failed = 0
     run_id = run_id or utc_now_iso()
     ensure_output_csv()
     reddit_client = get_client()
+    total_queries = len(subreddits_list) * len(keywords_list)
+    log_scrape_start("reddit", "subreddit_keyword", total_queries, "queries")
 
-    for subreddit_name in tqdm(subreddits_list, desc="Subreddits", unit="sub"):
-        try:
-            subreddit = reddit_client.get_subreddit(subreddit_name)
+    with tqdm(
+        total=total_queries,
+        desc="reddit subreddit_keyword",
+        unit="query",
+    ) as progress:
+        for subreddit_name in subreddits_list:
+            try:
+                subreddit = reddit_client.get_subreddit(subreddit_name)
+            except Exception as e:
+                logging.error(f"reddit subreddit_keyword access failed: {str(e)}")
+                failed += len(keywords_list)
+                progress.update(len(keywords_list))
+                update_progress(progress, collected, skipped, failed)
+                continue
 
-            for keyword in tqdm(
-                keywords_list, desc=f"  ↳ r/{subreddit_name}", leave=False, unit="kw"
-            ):
+            for keyword in keywords_list:
                 try:
                     results = reddit_client.search(
                         subreddit, keyword, limit=limit_per_query
@@ -398,114 +382,94 @@ def scrape_by_subreddits_keywords(
                     for submission in results:
                         if submission_exists(submission.id):
                             skipped += 1
+                        elif save_submission(
+                            submission,
+                            "keyword_search",
+                            f"r/{subreddit_name}:{keyword}",
+                            run_id,
+                        ):
+                            collected += 1
                         else:
-                            if save_submission(
-                                submission,
-                                "keyword_search",
-                                f"r/{subreddit_name}:{keyword}",
-                                run_id,
-                            ):
-                                collected += 1
-                            else:
-                                failed += 1
+                            failed += 1
 
                         time.sleep(rate_limit_sec)
-
                 except Exception as e:
-                    logging.error(
-                        f"Error searching '{keyword}' in r/{subreddit_name}: {str(e)}"
-                    )
+                    logging.error(f"reddit subreddit_keyword search failed: {str(e)}")
                     failed += 1
-                    time.sleep(rate_limit_sec)
 
-        except Exception as e:
-            logging.error(f"Error accessing subreddit r/{subreddit_name}: {str(e)}")
-            failed += 1
+                progress.update(1)
+                update_progress(progress, collected, skipped, failed)
 
-    print(f"\n{'='*60}")
-    print(f"RESULTS - Collected: {collected} | Skipped: {skipped} | Failed: {failed}")
-    print(f"{'='*60}\n")
+    log_scrape_done(
+        "reddit",
+        "subreddit_keyword",
+        total_queries,
+        total_queries,
+        collected,
+        skipped,
+        failed,
+    )
     return collected, skipped, failed
 
 
 def scrape_by_keywords(
     keywords_list, limit_per_query=10, rate_limit_sec=2, run_id=None
 ):
-    """
-    Search keywords across all of Reddit.
-
-    Args:
-        keywords_list: list of keywords to search
-        limit_per_query: number of results per keyword search
-        rate_limit_sec: delay between requests
-    """
-    print(f"\n{'='*60}")
-    print(f"SCRAPING BY KEYWORDS (ALL SUBREDDITS)")
-    print(f"Keywords: {', '.join(keywords_list)}")
-    print(f"{'='*60}")
-
+    """Search keywords across all of Reddit."""
     collected = 0
     skipped = 0
     failed = 0
     run_id = run_id or utc_now_iso()
     ensure_output_csv()
     reddit_client = get_client()
+    total_queries = len(keywords_list)
+    log_scrape_start("reddit", "keyword", total_queries, "queries")
 
-    for keyword in tqdm(keywords_list, desc="Processing keywords", unit="kw"):
-        try:
-            results = reddit_client.reddit.subreddit("all").search(
-                query=keyword, sort="new", time_filter="all", limit=limit_per_query
-            )
+    with tqdm(total=total_queries, desc="reddit keyword", unit="query") as progress:
+        for keyword in keywords_list:
+            try:
+                results = reddit_client.reddit.subreddit("all").search(
+                    query=keyword, sort="new", time_filter="all", limit=limit_per_query
+                )
 
-            for submission in tqdm(
-                results, desc=f"  ↳ '{keyword}'", leave=False, unit="post"
-            ):
-                if submission_exists(submission.id):
-                    skipped += 1
-                else:
-                    if save_submission(
-                        submission, "keyword_search", keyword, run_id
+                for submission in results:
+                    if submission_exists(submission.id):
+                        skipped += 1
+                    elif save_submission(
+                        submission,
+                        "keyword_search",
+                        keyword,
+                        run_id,
                     ):
                         collected += 1
                     else:
                         failed += 1
 
-                time.sleep(rate_limit_sec)
+                    time.sleep(rate_limit_sec)
+            except Exception as e:
+                logging.error(f"reddit keyword search failed: {str(e)}")
+                failed += 1
 
-        except Exception as e:
-            logging.error(
-                f"Error searching '{keyword}' across all subreddits: {str(e)}"
-            )
-            failed += 1
+            progress.update(1)
+            update_progress(progress, collected, skipped, failed)
 
-    print(f"\n{'='*60}")
-    print(f"RESULTS - Collected: {collected} | Skipped: {skipped} | Failed: {failed}")
-    print(f"{'='*60}\n")
+    log_scrape_done(
+        "reddit", "keyword", total_queries, total_queries, collected, skipped, failed
+    )
     return collected, skipped, failed
 
 
 if __name__ == "__main__":
-    # Load input data
     keywords = pd.read_csv(
         project_root / "src" / "collectors" / "inputs" / "keywords.csv"
     )
     subreddits = pd.read_csv(
         project_root / "src" / "collectors" / "inputs" / "subreddits.csv"
     )
-    post_ids = pd.read_csv(
-        project_root / "src" / "collectors" / "inputs" / "reddit_post_ids.csv"
-    )
 
-    # Option 1: Scrape by submission IDs
-    # submission_ids = post_ids["post_id"].tolist()
-    # scrape_by_submission_id(submission_ids, rate_limit_sec=2)
-
-    # Option 2: Scrape by subreddits + keywords
-    subreddits_list = subreddits["subreddit"].tolist()
-    keywords_list = keywords["keyword"].tolist()
     scrape_by_subreddits_keywords(
-        subreddits_list, keywords_list, limit_per_query=10, rate_limit_sec=2
+        subreddits["subreddit"].tolist(),
+        keywords["keyword"].tolist(),
+        limit_per_query=10,
+        rate_limit_sec=2,
     )
-
-    # Option 3: Scrape by keywords (all of Reddit)
-    # scrape_by_keywords(keywords_list, limit_per_query=10, rate_limit_sec=2)

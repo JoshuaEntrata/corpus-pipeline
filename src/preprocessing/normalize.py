@@ -3,6 +3,7 @@ import hashlib
 import re
 import sys
 from pathlib import Path
+from tqdm import tqdm
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -82,6 +83,17 @@ def iter_raw_csv(path):
 
 def load_raw_csv(path):
     return list(iter_raw_csv(path))
+
+
+def count_raw_csv_records(input_paths, source_filter=None):
+    count = 0
+    for input_path in input_paths:
+        for record in iter_raw_csv(input_path):
+            if source_filter and source_filter != "all":
+                if record.get("source_platform") != source_filter:
+                    continue
+            count += 1
+    return count
 
 
 def load_keyword_terms(path=None):
@@ -184,6 +196,7 @@ def normalize_raw_files(
     min_chars=15,
     source_filter=None,
     batch_size=1000,
+    show_progress=True,
 ):
     ai_terms, health_terms = load_keyword_terms(keywords_path)
     seen_text_hashes = set()
@@ -193,32 +206,57 @@ def normalize_raw_files(
     duplicate_text_count = 0
     empty_text_count = 0
     too_short_count = 0
+    total_records = count_raw_csv_records(input_paths, source_filter)
 
-    for input_path in input_paths:
-        for record in iter_raw_csv(input_path):
-            if source_filter and source_filter != "all":
-                if record.get("source_platform") != source_filter:
-                    continue
-            input_record_count += 1
+    progress = tqdm(
+        total=total_records,
+        desc="preprocessing normalize",
+        unit="record",
+        disable=not show_progress,
+    )
 
-            for item in explode_raw_record(record):
-                row = normalize_item(
-                    item,
-                    record,
-                    seen_text_hashes,
-                    ai_terms,
-                    health_terms,
-                    min_chars,
-                )
-                normalized_row_count += 1
-                duplicate_text_count += 1 if row["_is_duplicate_text"] else 0
-                empty_text_count += 1 if row["_is_empty_text"] else 0
-                too_short_count += 1 if row["_is_too_short"] else 0
-                batch.append(row)
+    with progress:
+        for input_path in input_paths:
+            for record in iter_raw_csv(input_path):
+                if source_filter and source_filter != "all":
+                    if record.get("source_platform") != source_filter:
+                        continue
+                input_record_count += 1
 
-                if len(batch) >= batch_size:
-                    append_csv_rows(output_path, batch, NORMALIZED_TEXT_ROW_FIELDS)
-                    batch.clear()
+                for item in explode_raw_record(record):
+                    row = normalize_item(
+                        item,
+                        record,
+                        seen_text_hashes,
+                        ai_terms,
+                        health_terms,
+                        min_chars,
+                    )
+                    normalized_row_count += 1
+                    duplicate_text_count += 1 if row["_is_duplicate_text"] else 0
+                    empty_text_count += 1 if row["_is_empty_text"] else 0
+                    too_short_count += 1 if row["_is_too_short"] else 0
+                    batch.append(row)
+
+                    if len(batch) >= batch_size:
+                        append_csv_rows(output_path, batch, NORMALIZED_TEXT_ROW_FIELDS)
+                        batch.clear()
+
+                progress.update(1)
+                if input_record_count % 25 == 0:
+                    progress.set_postfix(
+                        rows=normalized_row_count,
+                        duplicates=duplicate_text_count,
+                        short=too_short_count,
+                        refresh=False,
+                    )
+
+        progress.set_postfix(
+            rows=normalized_row_count,
+            duplicates=duplicate_text_count,
+            short=too_short_count,
+            refresh=False,
+        )
 
     append_csv_rows(output_path, batch, NORMALIZED_TEXT_ROW_FIELDS)
 

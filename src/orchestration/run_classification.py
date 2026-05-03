@@ -4,6 +4,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from tqdm import tqdm
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -91,6 +92,15 @@ def default_output_path(run_id):
 def iter_rows(path):
     with open(path, "r", newline="", encoding="utf-8") as f:
         yield from csv.DictReader(f)
+
+
+def count_rows(path, limit=None):
+    count = 0
+    for _row in iter_rows(path):
+        count += 1
+        if limit and count >= limit:
+            break
+    return count
 
 
 def read_existing_texts(path):
@@ -192,10 +202,12 @@ def run_classification(
     output_usd_per_1m_tokens=0.60,
     limit=None,
     batch_size=1000,
+    show_progress=True,
 ):
     ai_terms, health_terms = parse_keyword_config(keywords_path)
     existing_texts = read_existing_texts(output_path)
     classifier = AIHealthcareClassifier(model=model) if use_model else None
+    total_rows = count_rows(input_path, limit)
 
     output_rows = []
     input_row_count = 0
@@ -211,57 +223,85 @@ def run_classification(
     prefilter_counts = {}
     label_counts = {}
 
-    for row in iter_rows(input_path):
-        if limit and input_row_count >= limit:
-            break
-        input_row_count += 1
+    progress = tqdm(
+        total=total_rows,
+        desc="classification",
+        unit="row",
+        disable=not show_progress,
+    )
 
-        text = row_text(row)
-        estimated_prefilter_tokens += estimate_tokens(text)
-        if not text:
-            skipped_empty += 1
-            continue
-        if text in existing_texts:
-            skipped_existing += 1
-            continue
+    with progress:
+        for row in iter_rows(input_path):
+            if limit and input_row_count >= limit:
+                break
+            input_row_count += 1
 
-        prefilter = prefilter_text(
-            text,
-            is_empty=False,
-            is_too_short=len(text) < min_chars,
-            ai_terms=ai_terms,
-            health_terms=health_terms,
-        )
-        should_use_model = (
-            use_model
-            and prefilter["needs_model"]
-            and model_calls < max_model_calls
-        )
-        if should_use_model:
-            model_calls += 1
+            text = row_text(row)
+            estimated_prefilter_tokens += estimate_tokens(text)
+            if not text:
+                skipped_empty += 1
+                progress.update(1)
+                continue
+            if text in existing_texts:
+                skipped_existing += 1
+                progress.update(1)
+                continue
 
-        classified, usage = classify_row(text, prefilter, should_use_model, classifier)
-        if should_use_model:
-            model_input_tokens += int_arg(usage.get("input_tokens"))
-            model_output_tokens += int_arg(usage.get("output_tokens"))
-            model_total_tokens += int_arg(usage.get("total_tokens"))
-            total_usd_amount += usage_cost_usd(
-                usage,
-                input_usd_per_1m_tokens,
-                output_usd_per_1m_tokens,
+            prefilter = prefilter_text(
+                text,
+                is_empty=False,
+                is_too_short=len(text) < min_chars,
+                ai_terms=ai_terms,
+                health_terms=health_terms,
             )
-        output_rows.append(classified)
-        existing_texts.add(text)
-        classified_count += 1
-        prefilter_counts[prefilter["prefilter_result"]] = (
-            prefilter_counts.get(prefilter["prefilter_result"], 0) + 1
-        )
-        label = classified["ai_healthcare_label"]
-        label_counts[label] = label_counts.get(label, 0) + 1
+            should_use_model = (
+                use_model
+                and prefilter["needs_model"]
+                and model_calls < max_model_calls
+            )
+            if should_use_model:
+                model_calls += 1
 
-        if len(output_rows) >= batch_size:
-            append_csv_rows(output_path, output_rows, CLASSIFICATION_FIELDS)
-            output_rows.clear()
+            classified, usage = classify_row(
+                text, prefilter, should_use_model, classifier
+            )
+            if should_use_model:
+                model_input_tokens += int_arg(usage.get("input_tokens"))
+                model_output_tokens += int_arg(usage.get("output_tokens"))
+                model_total_tokens += int_arg(usage.get("total_tokens"))
+                total_usd_amount += usage_cost_usd(
+                    usage,
+                    input_usd_per_1m_tokens,
+                    output_usd_per_1m_tokens,
+                )
+            output_rows.append(classified)
+            existing_texts.add(text)
+            classified_count += 1
+            prefilter_counts[prefilter["prefilter_result"]] = (
+                prefilter_counts.get(prefilter["prefilter_result"], 0) + 1
+            )
+            label = classified["ai_healthcare_label"]
+            label_counts[label] = label_counts.get(label, 0) + 1
+
+            if len(output_rows) >= batch_size:
+                append_csv_rows(output_path, output_rows, CLASSIFICATION_FIELDS)
+                output_rows.clear()
+
+            progress.update(1)
+            if input_row_count % 25 == 0:
+                progress.set_postfix(
+                    classified=classified_count,
+                    skipped=skipped_existing + skipped_empty,
+                    model_calls=model_calls,
+                    refresh=False,
+                )
+
+        progress.set_postfix(
+            classified=classified_count,
+            skipped=skipped_existing + skipped_empty,
+            model_calls=model_calls,
+            refresh=False,
+        )
 
     append_csv_rows(output_path, output_rows, CLASSIFICATION_FIELDS)
 

@@ -1,15 +1,16 @@
-import pandas as pd
-import os
 import csv
 import json
-import time
 import logging
+import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+import pandas as pd
+from dotenv import load_dotenv
 from tqdm import tqdm
 
-from dotenv import load_dotenv
 try:
     from googleapiclient.discovery import build
     from googleapiclient.errors import HttpError
@@ -19,18 +20,16 @@ except ModuleNotFoundError:
     class HttpError(Exception):
         pass
 
-# Setup
+
 load_dotenv()
 
-# Get project root directory
 project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
-print(f"Project root: {project_root}")
 
 from src.contracts import RAW_COLLECTION_FIELDS
 
-# Setup logging
+
 log_dir = project_root / "logs" / "collectors"
 log_dir.mkdir(parents=True, exist_ok=True)
 error_log_path = log_dir / "youtube_scrape_errors.log"
@@ -41,10 +40,11 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
-# Setup output CSV path
 output_dir = project_root / "data" / "raw"
 output_dir.mkdir(parents=True, exist_ok=True)
 output_csv = output_dir / "youtube_scraped.csv"
+
+RAW_FIELDNAMES = RAW_COLLECTION_FIELDS
 
 
 def set_csv_field_size_limit():
@@ -59,13 +59,7 @@ def set_csv_field_size_limit():
 
 set_csv_field_size_limit()
 
-RAW_FIELDNAMES = RAW_COLLECTION_FIELDS
 
-print(f"Output CSV: {output_csv}")
-print(f"Error log: {error_log_path}")
-
-
-# YouTube Client
 class YouTubeClient:
     def __init__(self, api_key):
         if build is None:
@@ -77,7 +71,6 @@ class YouTubeClient:
         self.youtube = build("youtube", "v3", developerKey=api_key)
 
     def get_video(self, video_id):
-        """Get video details by ID"""
         try:
             request = self.youtube.videos().list(part="snippet,statistics", id=video_id)
             response = request.execute()
@@ -88,7 +81,6 @@ class YouTubeClient:
             raise Exception(f"YouTube API error: {e}")
 
     def search_videos(self, keyword, max_results=10):
-        """Search videos by keyword"""
         try:
             request = self.youtube.search().list(
                 q=keyword,
@@ -104,7 +96,6 @@ class YouTubeClient:
             raise Exception(f"YouTube API error: {e}")
 
     def get_comments(self, video_id, max_results=100):
-        """Get all comments and replies for a video"""
         try:
             comments_list = []
             request = self.youtube.commentThreads().list(
@@ -118,9 +109,8 @@ class YouTubeClient:
                 response = request.execute()
 
                 for item in response.get("items", []):
-                    # Top-level comment
                     top_comment = item["snippet"]["topLevelComment"]
-                    comment = item["snippet"]["topLevelComment"]["snippet"]
+                    comment = top_comment["snippet"]
                     comment_id = top_comment.get("id")
                     comments_list.append(
                         {
@@ -134,14 +124,12 @@ class YouTubeClient:
                         }
                     )
 
-                    # Replies to the comment
                     if item["snippet"]["totalReplyCount"] > 0:
                         for reply in item.get("replies", {}).get("comments", []):
                             reply_snippet = reply["snippet"]
-                            reply_id = reply.get("id")
                             comments_list.append(
                                 {
-                                    "source_item_id": reply_id,
+                                    "source_item_id": reply.get("id"),
                                     "parent_item_id": reply_snippet.get(
                                         "parentId", comment_id
                                     ),
@@ -156,21 +144,20 @@ class YouTubeClient:
                 if len(comments_list) >= max_results:
                     return comments_list[:max_results]
 
-                # Check if there are more pages
-                if "nextPageToken" in response:
-                    request = self.youtube.commentThreads().list(
-                        part="snippet,replies",
-                        videoId=video_id,
-                        textFormat="plainText",
-                        pageToken=response["nextPageToken"],
-                        maxResults=min(max_results, 100),
-                    )
-                else:
+                if "nextPageToken" not in response:
                     break
+
+                request = self.youtube.commentThreads().list(
+                    part="snippet,replies",
+                    videoId=video_id,
+                    textFormat="plainText",
+                    pageToken=response["nextPageToken"],
+                    maxResults=min(max_results, 100),
+                )
 
             return comments_list
         except Exception as e:
-            logging.error(f"Error getting comments for video {video_id}: {e}")
+            logging.error(f"youtube comment scrape failed: {e}")
             return []
 
 
@@ -189,16 +176,11 @@ def get_client():
     return _client
 
 
-# Helper Functions
 def clean_text(text):
-    """Clean text by replacing newlines and extra spaces with single space."""
     if not text:
         return text
-    # Replace newlines and tabs with spaces
     text = text.replace("\n", " ").replace("\r", " ").replace("\t", " ")
-    # Replace multiple spaces with single space
-    text = " ".join(text.split())
-    return text
+    return " ".join(text.split())
 
 
 def json_dumps(value):
@@ -210,7 +192,6 @@ def utc_now_iso():
 
 
 def normalize_youtube_timestamp(timestamp):
-    """Normalize YouTube ISO timestamps to UTC ISO strings."""
     if not timestamp:
         return None
 
@@ -228,6 +209,26 @@ def normalize_youtube_timestamp(timestamp):
         return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
     except (TypeError, ValueError):
         return None
+
+
+def log_scrape_start(platform, mode, total, unit):
+    tqdm.write(f"{platform} | {mode} | total={total} {unit}")
+
+
+def log_scrape_done(platform, mode, progress, total, collected, skipped, failed):
+    tqdm.write(
+        f"{platform} | {mode} | progress={progress}/{total} | "
+        f"scraped={collected} | skipped={skipped} | failed={failed}"
+    )
+
+
+def update_progress(progress, collected, skipped, failed):
+    progress.set_postfix(
+        scraped=collected,
+        skipped=skipped,
+        failed=failed,
+        refresh=False,
+    )
 
 
 def normalize_comment_record(comment, root_id):
@@ -302,7 +303,8 @@ def ensure_output_csv():
         rows = list(csv.DictReader(f))
 
     backup_path = output_csv.with_name(
-        f"{output_csv.stem}_legacy_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}{output_csv.suffix}"
+        f"{output_csv.stem}_legacy_"
+        f"{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}{output_csv.suffix}"
     )
     output_csv.replace(backup_path)
 
@@ -312,11 +314,10 @@ def ensure_output_csv():
         for row in rows:
             writer.writerow(migrate_legacy_record(row))
 
-    print(f"Migrated legacy YouTube CSV to schema. Backup: {backup_path}")
+    tqdm.write(f"youtube | migrate_schema | backup={backup_path}")
 
 
 def video_exists(video_id):
-    """Check if video ID already exists in the CSV."""
     if not output_csv.exists():
         return False
 
@@ -329,23 +330,19 @@ def video_exists(video_id):
                     return True
         return False
     except Exception as e:
-        logging.error(f"Error checking if video exists: {e}")
+        logging.error(f"youtube duplicate check failed: {e}")
         return False
 
 
 def save_video(
     video_id, video_data, collection_method, _collection_query, _run_id, youtube_client
 ):
-    """Save a single video to CSV."""
     try:
         ensure_output_csv()
         snippet = video_data["snippet"]
         created_at_utc = normalize_youtube_timestamp(snippet.get("publishedAt", ""))
         video_url = f"https://www.youtube.com/watch?v={video_id}"
-
-        # Get comments
         comments = youtube_client.get_comments(video_id, max_results=100)
-        comments_json = json_dumps(comments)
 
         record = {
             "source_platform": "youtube",
@@ -357,108 +354,83 @@ def save_video(
             "body_text": None,
             "description": clean_text(snippet.get("description", "")),
             "transcript": None,
-            "comments_json": comments_json,
+            "comments_json": json_dumps(comments),
         }
 
-        # Append to CSV
         with open(output_csv, "a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=RAW_FIELDNAMES)
             writer.writerow(record)
 
-        print(f"Saved: {video_id} ({collection_method})")
         return True
-
     except Exception as e:
-        error_msg = f"Error saving video {video_id}: {str(e)}"
-        logging.error(error_msg)
+        logging.error(f"youtube {collection_method} save failed: {str(e)}")
         return False
 
 
-# Scraping Functions
 def scrape_by_video_id(video_ids, rate_limit_sec=1, run_id=None):
-    """
-    Scrape targeted videos by their IDs.
-
-    Args:
-        video_ids: list of YouTube video IDs
-        rate_limit_sec: delay between requests in seconds
-    """
-    print(f"\n{'='*60}")
-    print(f"SCRAPING BY VIDEO ID")
-    print(f"Total to process: {len(video_ids)}")
-    print(f"{'='*60}")
-
+    """Scrape targeted videos by their IDs."""
     collected = 0
     skipped = 0
     failed = 0
     run_id = run_id or utc_now_iso()
     ensure_output_csv()
     youtube_client = get_client()
+    total = len(video_ids)
+    log_scrape_start("youtube", "targeted_id", total, "videos")
 
-    for video_id in tqdm(video_ids, desc="Processing videos", unit="video"):
-        # Check if already exists
-        if video_exists(video_id):
-            skipped += 1
-            time.sleep(rate_limit_sec)
-            continue
-
-        try:
-            video_data = youtube_client.get_video(video_id)
-            if video_data and save_video(
-                video_id, video_data, "targeted_id", video_id, run_id, youtube_client
-            ):
-                collected += 1
+    with tqdm(total=total, desc="youtube targeted_id", unit="video") as progress:
+        for video_id in video_ids:
+            if video_exists(video_id):
+                skipped += 1
             else:
-                failed += 1
+                try:
+                    video_data = youtube_client.get_video(video_id)
+                    if video_data and save_video(
+                        video_id,
+                        video_data,
+                        "targeted_id",
+                        video_id,
+                        run_id,
+                        youtube_client,
+                    ):
+                        collected += 1
+                    else:
+                        failed += 1
+                except Exception as e:
+                    logging.error(f"youtube targeted_id fetch failed: {str(e)}")
+                    failed += 1
 
-        except Exception as e:
-            logging.error(f"Error fetching video {video_id}: {str(e)}")
-            failed += 1
+            time.sleep(rate_limit_sec)
+            progress.update(1)
+            update_progress(progress, collected, skipped, failed)
 
-        time.sleep(rate_limit_sec)
-
-    print(f"\n{'='*60}")
-    print(f"RESULTS - Collected: {collected} | Skipped: {skipped} | Failed: {failed}")
-    print(f"{'='*60}\n")
+    log_scrape_done("youtube", "targeted_id", total, total, collected, skipped, failed)
     return collected, skipped, failed
 
 
 def scrape_by_keywords(keywords_list, limit_per_query=10, rate_limit_sec=1, run_id=None):
-    """
-    Search for videos by keywords.
-
-    Args:
-        keywords_list: list of keywords to search
-        limit_per_query: number of results per keyword search
-        rate_limit_sec: delay between requests in seconds
-    """
-    print(f"\n{'='*60}")
-    print(f"SCRAPING BY KEYWORDS")
-    print(f"Keywords: {', '.join(keywords_list)}")
-    print(f"{'='*60}")
-
+    """Search for videos by keywords."""
     collected = 0
     skipped = 0
     failed = 0
     run_id = run_id or utc_now_iso()
     ensure_output_csv()
     youtube_client = get_client()
+    total_queries = len(keywords_list)
+    log_scrape_start("youtube", "keyword", total_queries, "queries")
 
-    for keyword in tqdm(keywords_list, desc="Processing keywords", unit="kw"):
-        try:
-            search_results = youtube_client.search_videos(
-                keyword, max_results=limit_per_query
-            )
+    with tqdm(total=total_queries, desc="youtube keyword", unit="query") as progress:
+        for keyword in keywords_list:
+            try:
+                search_results = youtube_client.search_videos(
+                    keyword, max_results=limit_per_query
+                )
 
-            for result in tqdm(
-                search_results, desc=f"  ↳ '{keyword}'", leave=False, unit="video"
-            ):
-                video_id = result["id"]["videoId"]
-
-                if video_exists(video_id):
-                    skipped += 1
-                else:
-                    if save_video(
+                for result in search_results:
+                    video_id = result["id"]["videoId"]
+                    if video_exists(video_id):
+                        skipped += 1
+                    elif save_video(
                         video_id,
                         {"snippet": result["snippet"]},
                         "keyword_search",
@@ -470,31 +442,25 @@ def scrape_by_keywords(keywords_list, limit_per_query=10, rate_limit_sec=1, run_
                     else:
                         failed += 1
 
-                time.sleep(rate_limit_sec)
+                    time.sleep(rate_limit_sec)
+            except Exception as e:
+                logging.error(f"youtube keyword search failed: {str(e)}")
+                failed += 1
 
-        except Exception as e:
-            logging.error(f"Error searching '{keyword}': {str(e)}")
-            failed += 1
+            progress.update(1)
+            update_progress(progress, collected, skipped, failed)
 
-    print(f"\n{'='*60}")
-    print(f"RESULTS - Collected: {collected} | Skipped: {skipped} | Failed: {failed}")
-    print(f"{'='*60}\n")
+    log_scrape_done(
+        "youtube", "keyword", total_queries, total_queries, collected, skipped, failed
+    )
     return collected, skipped, failed
 
 
 if __name__ == "__main__":
-    # Load input data
-    youtube_ids = pd.read_csv(
-        project_root / "src" / "collectors" / "inputs" / "youtube_post_ids.csv"
-    )
     keywords = pd.read_csv(
         project_root / "src" / "collectors" / "inputs" / "keywords.csv"
     )
 
-    # Option 1: Scrape by video IDs
-    # video_ids_list = youtube_ids["video_id"].tolist()
-    # scrape_by_video_id(video_ids_list, rate_limit_sec=1)
-
-    # Option 2: Scrape by keywords
-    keywords_list = keywords["keyword"].tolist()
-    scrape_by_keywords(keywords_list, limit_per_query=10, rate_limit_sec=1)
+    scrape_by_keywords(
+        keywords["keyword"].tolist(), limit_per_query=10, rate_limit_sec=1
+    )

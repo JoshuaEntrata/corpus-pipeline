@@ -352,7 +352,12 @@ def main():
     summary_path, summary = save_summary(
         run_id, results, project_path(config["run"]["registry_path"])
     )
-    print(json.dumps(summary, indent=2))
+    print(
+        "Collectors done - "
+        f"scraped: {summary['collected_count']} | "
+        f"skipped: {summary['skipped_existing_id_count']} | "
+        f"failed: {summary['failed_count']}"
+    )
     print(f"Run summary saved to: {summary_path}")
 
 
