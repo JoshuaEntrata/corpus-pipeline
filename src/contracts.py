@@ -34,6 +34,8 @@ CLASSIFICATION_FIELDS = [
 
 LANGUAGE_DETECTION_FIELDS = [
     "id",
+    "text",
+    "ai_healthcare_label",
     "language_label",
     "language_confidence",
     "language_detector_version",

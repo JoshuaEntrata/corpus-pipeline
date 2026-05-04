@@ -153,17 +153,13 @@ health_terms:
     - hepatitis
     - diabetes
     - hypertension
-    - heart disease
+    - heart
     - cardiovascular disease*
-    - heart failure
     - stroke
     - asthma
     - copd
     - kidney
-    - kidney disease
-    - kidney failure
     - renal
-    - renal disease*
     - alzheimer
     - dementia
     - depression
@@ -211,6 +207,13 @@ health_terms:
     - sick
     - sickness
     - nausea
+    - muscle*
+    - bone*
+    - brain
+    - diet
+    - weight
+    - height
+    - fitness
   filipino_common:
     - kalusugan
     - pangkalusugan

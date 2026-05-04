@@ -63,3 +63,17 @@ python -m src.orchestration.run_classification --use-model --max-model-calls 50
 Outputs are written to `data/classified/ai_healthcare_classified_<run_id>.csv`.
 The classified CSV keeps only the text, label, confidence, short reason,
 timestamp, and prefilter fields.
+
+## Language Detection
+
+Detect language only for rows already labeled `valid_ai_healthcare`. By default
+the runner uses the newest file in `data/classified/`; pass `--input` to choose
+a specific classified CSV.
+
+```bash
+python -m src.orchestration.run_language_detection
+python -m src.orchestration.run_language_detection --input data/classified/ai_healthcare_classified_<run_id>.csv
+python -m src.orchestration.run_language_detection --no-openai-fallback
+```
+
+Outputs are written to `data/language_detected/language_detected_<run_id>.csv`.

@@ -223,3 +223,5 @@ logs/collectors/run_summary_*.json
 logs/preprocessing/preprocessing_summary_*.json
 data/classified/ai_healthcare_classified_*.csv
 logs/classification/classification_summary_*.json
+data/language_detected/language_detected_*.csv
+logs/language_detection/language_detection_summary_*.json

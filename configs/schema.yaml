@@ -46,6 +46,8 @@ classification:
 language_detection:
   fields:
     id: string
+    text: string
+    ai_healthcare_label: string
     language_label: string
     language_confidence: float_or_string
     language_detector_version: string

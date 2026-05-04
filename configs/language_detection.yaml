@@ -1,3 +1,6 @@
+input_folder: data/classified
+output_folder: data/language_detected
+
 target_languages:
   - english
   - tagalog
@@ -6,6 +9,15 @@ target_languages:
   - hiligaynon
   - mixed_english_tagalog
   - mixed_english_cebuano
+  - mixed_english_ilocano
+  - mixed_english_hiligaynon
+  - mixed_tagalog_cebuano
+  - mixed_tagalog_ilocano
+  - mixed_tagalog_hiligaynon
+  - mixed_cebuano_ilocano
+  - mixed_cebuano_hiligaynon
+  - mixed_ilocano_hiligaynon
+  - mixed_multiple
   - mixed_other
   - unknown
   - too_short
@@ -14,8 +26,177 @@ thresholds:
   min_chars_for_detection: 15
   strong_confidence: 0.80
   fallback_confidence: 0.60
+  min_rule_score: 1.0
+  mixed_score_ratio: 0.35
 
 fallback:
   use_openai_when_uncertain: true
   use_openai_for_short_text: false
+  model: gpt-4o-mini
 
+language_terms:
+  english:
+    - about
+    - after
+    - also
+    - and
+    - are
+    - artificial intelligence
+    - because
+    - been
+    - being
+    - can
+    - clinic
+    - could
+    - deep learning
+    - diagnosis
+    - disease
+    - doctor
+    - for
+    - from
+    - had
+    - has
+    - have
+    - health
+    - healthcare
+    - hospital
+    - into
+    - is
+    - large language model
+    - machine learning
+    - medical
+    - medicine
+    - mental health
+    - more
+    - not
+    - nurse
+    - only
+    - patient
+    - patients
+    - public health
+    - should
+    - that
+    - the
+    - these
+    - this
+    - those
+    - treatment
+    - was
+    - were
+    - when
+    - while
+    - will
+    - with
+    - without
+    - would
+  tagalog:
+    - ako
+    - ang
+    - ay
+    - din
+    - daw
+    - gamit*
+    - gamot
+    - ginagami*
+    - gumamit
+    - hindi
+    - ikaw
+    - ito
+    - iyan
+    - kalusugan
+    - kami
+    - kasi
+    - kayo
+    - lang
+    - lunas
+    - magagamit
+    - mga
+    - naman
+    - namin
+    - natin
+    - niyan
+    - nyan
+    - opo
+    - paggagamot
+    - pangkalusugan
+    - para
+    - pero
+    - po
+    - pwede*
+    - rin
+    - raw
+    - sila
+    - siya
+    - susunod
+    - tao
+    - tayo
+    - teknolohiya
+    - wala
+    - walang
+    - yung
+  cebuano:
+    - ako
+    - dili
+    - gamit*
+    - gigamit
+    - gyud
+    - iya
+    - iyaha
+    - kaayo
+    - kahimsog
+    - kay
+    - kinahanglan
+    - ko
+    - maayo
+    - magamit
+    - mao
+    - naa
+    - nato
+    - ngano
+    - nindot
+    - pagtambal
+    - panglawas
+    - ra
+    - tambal
+    - ta
+    - unsa
+    - wala
+  ilocano:
+    - adda
+    - agas
+    - awan
+    - dagiti
+    - datoy
+    - dayta
+    - daytoy
+    - haan
+    - isu
+    - kadagiti
+    - kami
+    - ken
+    - panangagas
+    - pasiente
+    - saan
+    - salun-at
+    - tayo
+    - wen
+  hiligaynon:
+    - akon
+    - amon
+    - ara
+    - aton
+    - bala
+    - balatian
+    - bulong
+    - gamit*
+    - gid
+    - gin*
+    - indi
+    - iya
+    - kinahanglan
+    - kon
+    - maayo
+    - pagbulong
+    - panglawas
+    - sang
+    - wala

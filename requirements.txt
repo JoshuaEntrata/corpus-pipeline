@@ -9,3 +9,4 @@ prawcore
 openai
 google-api-python-client
 pyyaml
+langdetect
