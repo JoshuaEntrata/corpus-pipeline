@@ -1,6 +1,7 @@
 ai_terms:
   english:
     - ai
+    - a.i*
     - artificial intelligence
     - openai
     - chatgpt
@@ -8,7 +9,7 @@ ai_terms:
     - gpt-4
     - gpt-4o
     - llm
-    - large language model
+    - large language model*
     - generative ai
     - anthropic
     - claude
@@ -22,23 +23,57 @@ ai_terms:
     - medpalm
     - medical ai
     - clinical ai
-    - machine learning
-    - deep learning
-    - neural network
-    - chatbot
-    - algorithm
+    - machine learning*
+    - deep learning*
+    - data science
+    - data analytic*
+    - neural network*
+    - transformer*
+    - embedding*
+    - chatbot*
+    - algorithm*
+    - ai model*
+    - language model*
+    - foundation model*
     - natural language processing
-    - nlp
-    - decision support
-    - clinical decision support
-    - automation
+    - nlp*
+    - virtual assistant*
+    - decision support*
+    - clinical decision support*
+    - automation*
     - automated
     - ai scribe
     - ambient scribe
-    - speech recognition
-    - computer vision
+    - speech recognition*
+    - computer vision*
+    - computer*
+    - computing
+    - gpu*
+    - graphics processing unit*
+    - processor*
+    - cuda
+    - cloud computing
     - predictive analytics
-    - predictive model
+    - predictive model*
+    - analytic*
+    - robot*
+    - autonomous*
+    - ai-generate*
+    - digital
+    - train data
+    - training data
+    - reinforcement learning
+    - classification
+    - detection
+    - linear regression
+    - logistic regression
+    - decision tree*
+    - summariz*
+    - transcrib*
+    - n8n
+    - gohighlevel
+    - ghl
+    - medgemma
   filipino_common:
     - ai
     - artificial intelligence
@@ -47,74 +82,135 @@ ai_terms:
     - modelo
     - teknolohiya
     - awtomasyon
+    - automatiko
 
 health_terms:
   english:
-    - health
-    - healthcare
-    - medical
-    - medicine
-    - doctor
-    - nurse
-    - hospital
-    - clinic
-    - patient
-    - diagnosis
-    - treatment
-    - symptoms
+    - health*                     
+    - med                         
+    - meds
+    - medical*
+    - medicine*
+    - medication*
+    - medtech
+    - med school
+    - doctor*
+    - nurse*
+    - hospital*
+    - clinic*
+    - patient*
+    - diagnos*                   
+    - treat*                     
+    - symptom*
+    - disease*
+    - illness*
+    - disorder*
     - public health
     - mental health
-    - radiology
-    - pharmacy
-    - surgery
-    - clinical
-    - health records
-    - electronic medical record
-    - electronic health record
-    - medical record
+    - radiolog*                
+    - pharmac*              
+    - surg*                   
+    - clinical*
+    - health record*
+    - medical record*
     - emr
     - ehr
-    - telehealth
-    - telemedicine
+    - telehealth*
+    - telemedicine*
     - triage
-    - emergency room
+    - emergency room*
     - er
     - icu
-    - laboratory
-    - lab results
-    - blood test
-    - vital signs
+    - laborator*                  # laboratory, laboratories
+    - lab
+    - labs
+    - lab result*
+    - blood test*
+    - vital sign*
     - blood pressure
     - glucose
-    - insulin
-    - vaccine
-    - vaccination
-    - infection
+    - insulin*
+    - vaccin*                     # vaccine, vaccines, vaccination
+    - infect*                     # infect, infects, infection
     - sepsis
-    - cancer
-    - tumor
-    - oncology
+    - cancer*
+    - tumor*
+    - oncolog*                    # oncology, oncologist
     - chemotherapy
     - radiotherapy
     - biopsy
     - screening
+    - covid*
+    - influenza
+    - flu
+    - pneumonia
+    - tuberculosis
+    - tb
+    - dengue
+    - malaria
+    - hiv
+    - hiv/aids
+    - hepatitis
     - diabetes
     - hypertension
     - heart disease
+    - cardiovascular disease*
+    - heart failure
     - stroke
     - asthma
     - copd
+    - kidney
     - kidney disease
+    - kidney failure
+    - renal
+    - renal disease*
     - alzheimer
     - dementia
     - depression
     - anxiety
+    - arthritis
+    - obesity
+    - chronic disease*
+    - pregnant
     - pregnancy
     - maternal health
-    - cardiology
-    - neurology
-    - pathology
-    - dermatology
+    - cardiolog*
+    - neurolog*
+    - patholog*
+    - dermatolog*
+    - therap*
+    - psychiat*
+    - psycholog*
+    - psychotherap*
+    - endocrinolog*
+    - gastroenterolog*
+    - nephrolog*
+    - pulmonolog*
+    - urolog*
+    - hematolog*
+    - pediatric*
+    - geriatric*
+    - obstetric*
+    - gynecolog*
+    - physical therap*
+    - occupational therap*
+    - respiratory therap*
+    - speech therap*
+    - physiotherap*
+    - physician*
+    - clinician*
+    - practitioner*
+    - specialist*
+    - paramedic*
+    - dentist*
+    - dietitian*
+    - nutritionist*
+    - midwife
+    - xray*
+    - x-ray*
+    - sick
+    - sickness
+    - nausea
   filipino_common:
     - kalusugan
     - pangkalusugan
@@ -126,6 +222,7 @@ health_terms:
     - sintomas
     - gamot
     - lunas
+    - paggamot
     - nars
     - klinika
     - konsultasyon

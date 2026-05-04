@@ -3,7 +3,7 @@ run:
   skip_existing_ids: true
   log_level: INFO
   rate_limit_sec: 2
-  limit_per_query: 10
+  limit_per_query: 50
   registry_path: data/registry/collected_ids.csv
 
 collectors:

@@ -1,6 +1,6 @@
 labels:
   valid_ai_healthcare:
-    description: Standalone text connects AI and healthcare.
+    description: Standalone text connects AI and healthcare, including positive, negative, neutral, mixed, skeptical, sarcastic, or question-form text.
   invalid_ai_only:
     description: Standalone text discusses AI but not healthcare.
   invalid_health_only:
@@ -8,7 +8,6 @@ labels:
   invalid_neither:
     description: Standalone text discusses neither AI nor healthcare.
   invalid_confusing_or_insufficient:
-    description: Standalone text is too vague, too short, or context-dependent.
+    description: Standalone text is too vague, too short, or context-dependent, and its AI-healthcare connection cannot be judged from the text alone.
   unsure:
     description: Enough text exists, but classification remains uncertain.
-

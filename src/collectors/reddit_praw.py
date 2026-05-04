@@ -12,7 +12,6 @@ import praw
 from dotenv import load_dotenv
 from tqdm import tqdm
 
-
 load_dotenv()
 
 project_root = Path(__file__).parent.parent.parent
@@ -20,7 +19,6 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from src.contracts import RAW_COLLECTION_FIELDS
-
 
 log_dir = project_root / "logs" / "collectors"
 log_dir.mkdir(parents=True, exist_ok=True)
@@ -284,7 +282,9 @@ def get_comments_data(submission):
         return json_dumps([])
 
 
-def save_submission(submission, collection_method, _collection_query=None, _run_id=None):
+def save_submission(
+    submission, collection_method, _collection_query=None, _run_id=None
+):
     try:
         ensure_output_csv()
         reddit_url = f"https://www.reddit.com{submission.permalink}"
@@ -346,7 +346,7 @@ def scrape_by_submission_id(submission_ids, rate_limit_sec=2, run_id=None):
 
 
 def scrape_by_subreddits_keywords(
-    subreddits_list, keywords_list, limit_per_query=10, rate_limit_sec=2, run_id=None
+    subreddits_list, keywords_list, limit_per_query=100, rate_limit_sec=2, run_id=None
 ):
     """Search keywords across configured subreddits."""
     collected = 0
@@ -413,7 +413,7 @@ def scrape_by_subreddits_keywords(
 
 
 def scrape_by_keywords(
-    keywords_list, limit_per_query=10, rate_limit_sec=2, run_id=None
+    keywords_list, limit_per_query=100, rate_limit_sec=2, run_id=None
 ):
     """Search keywords across all of Reddit."""
     collected = 0
@@ -470,6 +470,6 @@ if __name__ == "__main__":
     scrape_by_subreddits_keywords(
         subreddits["subreddit"].tolist(),
         keywords["keyword"].tolist(),
-        limit_per_query=10,
+        limit_per_query=100,
         rate_limit_sec=2,
     )

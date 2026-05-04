@@ -29,7 +29,6 @@ if str(project_root) not in sys.path:
 
 from src.contracts import RAW_COLLECTION_FIELDS
 
-
 log_dir = project_root / "logs" / "collectors"
 log_dir.mkdir(parents=True, exist_ok=True)
 error_log_path = log_dir / "youtube_scrape_errors.log"
@@ -80,7 +79,7 @@ class YouTubeClient:
         except HttpError as e:
             raise Exception(f"YouTube API error: {e}")
 
-    def search_videos(self, keyword, max_results=10):
+    def search_videos(self, keyword, max_results=50):
         try:
             request = self.youtube.search().list(
                 q=keyword,
@@ -197,9 +196,10 @@ def normalize_youtube_timestamp(timestamp):
 
     try:
         timestamp_text = str(timestamp)
-        if isinstance(timestamp, (int, float)) or timestamp_text.replace(
-            ".", "", 1
-        ).isdigit():
+        if (
+            isinstance(timestamp, (int, float))
+            or timestamp_text.replace(".", "", 1).isdigit()
+        ):
             return (
                 datetime.fromtimestamp(float(timestamp), tz=timezone.utc)
                 .isoformat()
@@ -408,7 +408,9 @@ def scrape_by_video_id(video_ids, rate_limit_sec=1, run_id=None):
     return collected, skipped, failed
 
 
-def scrape_by_keywords(keywords_list, limit_per_query=10, rate_limit_sec=1, run_id=None):
+def scrape_by_keywords(
+    keywords_list, limit_per_query=50, rate_limit_sec=1, run_id=None
+):
     """Search for videos by keywords."""
     collected = 0
     skipped = 0
@@ -462,5 +464,5 @@ if __name__ == "__main__":
     )
 
     scrape_by_keywords(
-        keywords["keyword"].tolist(), limit_per_query=10, rate_limit_sec=1
+        keywords["keyword"].tolist(), limit_per_query=50, rate_limit_sec=1
     )

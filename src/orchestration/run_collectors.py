@@ -1,5 +1,6 @@
 import argparse
 import csv
+import hashlib
 import json
 import sys
 from copy import deepcopy
@@ -10,8 +11,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.storage.ids import IdRegistry
-from src.storage.read_write import set_csv_field_size_limit
+from src.contracts import RAW_COLLECTION_FIELDS
+from src.storage.ids import IdRegistry, hash_text
+from src.storage.read_write import append_csv_rows, set_csv_field_size_limit
 
 set_csv_field_size_limit()
 
@@ -22,7 +24,7 @@ DEFAULT_CONFIG = {
         "skip_existing_ids": True,
         "log_level": "INFO",
         "rate_limit_sec": 2,
-        "limit_per_query": 10,
+        "limit_per_query": 50,
         "registry_path": "data/registry/collected_ids.csv",
     },
     "collectors": {
@@ -49,6 +51,12 @@ DEFAULT_CONFIG = {
                 "keyword_column": "keyword",
             },
             "output_path": "data/raw/youtube_scraped.csv",
+        },
+        "manual_csv": {
+            "enabled": True,
+            "modes": ["manual_csv"],
+            "input_folder": "data/manual_uploads",
+            "output_path": "data/raw/manual_csv_scraped.csv",
         },
         "ensembledata": {"enabled": False},
     },
@@ -182,6 +190,87 @@ def read_csv_column(path, column):
         ]
 
 
+MANUAL_TEXT_COLUMNS = [
+    "text",
+    "post_text",
+    "comment_text",
+    "body_text",
+    "content",
+    "message",
+    "description",
+    "title",
+]
+MANUAL_SOURCE_COLUMNS = ["source_platform", "source", "platform"]
+MANUAL_URL_COLUMNS = ["source_url", "url", "link", "permalink"]
+MANUAL_ID_COLUMNS = ["source_item_id", "id", "post_id", "comment_id"]
+MANUAL_CREATED_COLUMNS = ["created_at_utc", "created_at", "timestamp", "date"]
+
+
+def clean_cell(value):
+    if value in (None, ""):
+        return None
+    value = str(value).strip()
+    return value or None
+
+
+def first_present(row, columns):
+    for column in columns:
+        value = clean_cell(row.get(column))
+        if value is not None:
+            return value
+    return None
+
+
+def normalize_source_platform(value):
+    value = clean_cell(value) or "manual_csv"
+    return value.lower().replace(" ", "_")
+
+
+def stable_manual_source_item_id(path, row_number, text, source_url):
+    value = f"{Path(path).name}|{row_number}|{source_url or ''}|{text or ''}"
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:24]
+
+
+def iter_manual_upload_rows(input_folder):
+    input_folder = project_path(input_folder)
+    if not input_folder.exists():
+        return
+
+    for input_path in sorted(input_folder.glob("*.csv")):
+        with open(input_path, "r", newline="", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            for row_number, row in enumerate(reader, start=2):
+                text = first_present(row, MANUAL_TEXT_COLUMNS)
+                if not text:
+                    continue
+
+                source_url = first_present(row, MANUAL_URL_COLUMNS)
+                source_platform = normalize_source_platform(
+                    first_present(row, MANUAL_SOURCE_COLUMNS)
+                )
+                source_item_id = first_present(row, MANUAL_ID_COLUMNS)
+                if not source_item_id:
+                    source_item_id = stable_manual_source_item_id(
+                        input_path, row_number, text, source_url
+                    )
+
+                title = first_present(row, ["title", "headline"])
+                description = first_present(row, ["description"])
+
+                yield {
+                    "source_platform": source_platform,
+                    "source_item_id": source_item_id,
+                    "source_url": source_url,
+                    "collection_method": "manual_csv",
+                    "created_at_utc": first_present(row, MANUAL_CREATED_COLUMNS),
+                    "title": title if title != text else None,
+                    "body_text": text,
+                    "description": description if description != text else None,
+                    "transcript": None,
+                    "comments_json": None,
+                }
+
+
 def selected_modes(source_config, requested_mode):
     modes = source_config.get("modes", [])
     if requested_mode == "all":
@@ -279,6 +368,46 @@ def run_youtube(config, args, registry, results, run_id):
     refresh_registry(registry, source_config["output_path"], "youtube")
 
 
+def run_manual_csv(config, args, registry, results, run_id):
+    source_config = config["collectors"]["manual_csv"]
+    modes = selected_modes(source_config, args.mode)
+    if not modes:
+        return
+
+    output_path = project_path(source_config["output_path"])
+    registry.refresh_from_raw_csv(output_path, default_platform="manual_csv")
+
+    collected = 0
+    skipped = 0
+    failed = 0
+    output_rows = []
+
+    try:
+        rows = iter_manual_upload_rows(source_config["input_folder"]) or []
+        for row in rows:
+            if config["run"].get("skip_existing_ids", True) and registry.has(
+                row["source_platform"], row["source_item_id"]
+            ):
+                skipped += 1
+                continue
+
+            output_rows.append(row)
+            registry.add(
+                source_platform=row["source_platform"],
+                source_item_id=row["source_item_id"],
+                source_url=row.get("source_url"),
+                text_hash=hash_text(row.get("body_text")),
+                first_seen_at_utc=run_id,
+            )
+            collected += 1
+    except (OSError, csv.Error):
+        failed += 1
+
+    append_csv_rows(output_path, output_rows, RAW_COLLECTION_FIELDS)
+    registry.save()
+    add_result(results, "manual_csv", "manual_csv", collected, skipped, failed)
+
+
 def save_summary(run_id, results, registry_path):
     summary_dir = PROJECT_ROOT / "logs" / "collectors"
     summary_dir.mkdir(parents=True, exist_ok=True)
@@ -304,13 +433,13 @@ def main():
     parser = argparse.ArgumentParser(description="Run configured data collectors.")
     parser.add_argument(
         "--source",
-        choices=["all", "reddit", "youtube"],
+        choices=["all", "reddit", "youtube", "manual_csv"],
         default="all",
         help="Collector source to run. Defaults to all enabled collectors.",
     )
     parser.add_argument(
         "--mode",
-        choices=["all", "targeted", "keyword", "subreddit_keyword"],
+        choices=["all", "targeted", "keyword", "subreddit_keyword", "manual_csv"],
         default="all",
         help="Collection mode to run. Defaults to every configured mode.",
     )
@@ -337,7 +466,9 @@ def main():
     run_id = utc_now_iso()
     results = []
 
-    selected_sources = ["reddit", "youtube"] if args.source == "all" else [args.source]
+    selected_sources = (
+        list(config.get("collectors", {}).keys()) if args.source == "all" else [args.source]
+    )
 
     for source in selected_sources:
         source_config = config["collectors"].get(source, {})
@@ -348,6 +479,8 @@ def main():
             run_reddit(config, args, registry, results, run_id)
         elif source == "youtube":
             run_youtube(config, args, registry, results, run_id)
+        elif source == "manual_csv":
+            run_manual_csv(config, args, registry, results, run_id)
 
     summary_path, summary = save_summary(
         run_id, results, project_path(config["run"]["registry_path"])

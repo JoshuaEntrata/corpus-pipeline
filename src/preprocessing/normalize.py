@@ -1,6 +1,5 @@
 import csv
 import hashlib
-import re
 import sys
 from pathlib import Path
 from tqdm import tqdm
@@ -11,159 +10,13 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.contracts import NORMALIZED_TEXT_ROW_FIELDS
+from src.config.keywords import contains_term, load_keyword_terms
 from src.preprocessing.clean_text import clean_text
 from src.preprocessing.explode_threads import explode_raw_record
 from src.storage.read_write import append_csv_rows, set_csv_field_size_limit
 
 
 set_csv_field_size_limit()
-
-DEFAULT_AI_TERMS = [
-    "ai",
-    "artificial intelligence",
-    "openai",
-    "chatgpt",
-    "gpt",
-    "gpt-4",
-    "gpt-4o",
-    "llm",
-    "large language model",
-    "generative ai",
-    "anthropic",
-    "claude",
-    "gemini",
-    "deepmind",
-    "llama",
-    "copilot",
-    "openevidence",
-    "open evidence",
-    "med-palm",
-    "medpalm",
-    "medical ai",
-    "clinical ai",
-    "machine learning",
-    "deep learning",
-    "neural network",
-    "natural language processing",
-    "nlp",
-    "chatbot",
-    "algorithm",
-    "decision support",
-    "clinical decision support",
-    "automation",
-    "automated",
-    "ai scribe",
-    "ambient scribe",
-    "speech recognition",
-    "computer vision",
-    "predictive analytics",
-    "predictive model",
-    "modelo",
-    "teknolohiya",
-    "awtomasyon",
-]
-
-DEFAULT_HEALTH_TERMS = [
-    "health",
-    "healthcare",
-    "medical",
-    "medicine",
-    "doctor",
-    "nurse",
-    "hospital",
-    "clinic",
-    "patient",
-    "diagnosis",
-    "treatment",
-    "symptoms",
-    "public health",
-    "mental health",
-    "radiology",
-    "pharmacy",
-    "surgery",
-    "clinical",
-    "health records",
-    "electronic medical record",
-    "electronic health record",
-    "medical record",
-    "emr",
-    "ehr",
-    "telehealth",
-    "telemedicine",
-    "triage",
-    "emergency room",
-    "er",
-    "icu",
-    "laboratory",
-    "lab results",
-    "blood test",
-    "vital signs",
-    "blood pressure",
-    "glucose",
-    "insulin",
-    "vaccine",
-    "vaccination",
-    "infection",
-    "sepsis",
-    "cancer",
-    "tumor",
-    "oncology",
-    "chemotherapy",
-    "radiotherapy",
-    "biopsy",
-    "screening",
-    "diabetes",
-    "hypertension",
-    "heart disease",
-    "stroke",
-    "asthma",
-    "copd",
-    "kidney disease",
-    "alzheimer",
-    "dementia",
-    "depression",
-    "anxiety",
-    "pregnancy",
-    "maternal health",
-    "cardiology",
-    "neurology",
-    "pathology",
-    "dermatology",
-    "kalusugan",
-    "pangkalusugan",
-    "doktor",
-    "duktor",
-    "ospital",
-    "pasyente",
-    "sakit",
-    "sintomas",
-    "gamot",
-    "lunas",
-    "nars",
-    "klinika",
-    "konsultasyon",
-    "bakuna",
-    "impeksyon",
-    "kanser",
-    "diyabetis",
-    "altapresyon",
-    "alta presyon",
-    "presyon",
-    "pagbubuntis",
-    "kahimsog",
-    "panglawas",
-    "tambal",
-    "pagtambal",
-    "hilanat",
-    "salun-at",
-    "pasiente",
-    "agas",
-    "panangagas",
-    "balatian",
-    "bulong",
-    "pagbulong",
-    "pagbusong",
-]
 
 
 def hash_value(value):
@@ -188,49 +41,25 @@ def load_raw_csv(path):
     return list(iter_raw_csv(path))
 
 
+def record_matches_source(record, source_filter=None):
+    if not source_filter or source_filter == "all":
+        return True
+    if record.get("source_platform") == source_filter:
+        return True
+    return (
+        source_filter == "manual_csv"
+        and record.get("collection_method") == "manual_csv"
+    )
+
+
 def count_raw_csv_records(input_paths, source_filter=None):
     count = 0
     for input_path in input_paths:
         for record in iter_raw_csv(input_path):
-            if source_filter and source_filter != "all":
-                if record.get("source_platform") != source_filter:
-                    continue
+            if not record_matches_source(record, source_filter):
+                continue
             count += 1
     return count
-
-
-def load_keyword_terms(path=None):
-    if not path:
-        return DEFAULT_AI_TERMS, DEFAULT_HEALTH_TERMS
-
-    path = Path(path)
-    if not path.exists():
-        return DEFAULT_AI_TERMS, DEFAULT_HEALTH_TERMS
-
-    terms = {"ai_terms": [], "health_terms": []}
-    current_group = None
-    with open(path, "r", encoding="utf-8") as f:
-        for raw_line in f:
-            stripped = raw_line.strip()
-            if not stripped or stripped.startswith("#"):
-                continue
-            if stripped in ("ai_terms:", "health_terms:"):
-                current_group = stripped[:-1]
-                continue
-            if current_group and stripped.startswith("- "):
-                terms[current_group].append(stripped[2:].strip().lower())
-
-    ai_terms = terms["ai_terms"] or DEFAULT_AI_TERMS
-    health_terms = terms["health_terms"] or DEFAULT_HEALTH_TERMS
-    return ai_terms, health_terms
-
-
-def contains_term(text, terms):
-    text = text.lower()
-    return any(
-        re.search(rf"(?<!\w){re.escape(term.lower())}(?!\w)", text)
-        for term in terms
-    )
 
 
 def normalize_item(item, raw_record, seen_text_hashes, ai_terms, health_terms, min_chars):
@@ -271,8 +100,11 @@ def normalize_item(item, raw_record, seen_text_hashes, ai_terms, health_terms, m
 
 
 def normalize_raw_records(records, ai_terms=None, health_terms=None, min_chars=15):
-    ai_terms = ai_terms or DEFAULT_AI_TERMS
-    health_terms = health_terms or DEFAULT_HEALTH_TERMS
+    if ai_terms is None or health_terms is None:
+        config_ai_terms, config_health_terms = load_keyword_terms()
+        ai_terms = config_ai_terms if ai_terms is None else ai_terms
+        health_terms = config_health_terms if health_terms is None else health_terms
+
     normalized_rows = []
     seen_text_hashes = set()
 
@@ -321,9 +153,8 @@ def normalize_raw_files(
     with progress:
         for input_path in input_paths:
             for record in iter_raw_csv(input_path):
-                if source_filter and source_filter != "all":
-                    if record.get("source_platform") != source_filter:
-                        continue
+                if not record_matches_source(record, source_filter):
+                    continue
                 input_record_count += 1
 
                 for item in explode_raw_record(record):

@@ -65,9 +65,11 @@ def main():
     )
     parser.add_argument(
         "--source",
-        choices=["all", "reddit", "youtube", "manual_csv"],
         default="all",
-        help="Only normalize rows from this source platform.",
+        help=(
+            "Only normalize rows from this source platform. Use manual_csv for "
+            "all manual uploads, or a platform such as facebook."
+        ),
     )
     parser.add_argument("--output", help="Output CSV path.")
     parser.add_argument(
@@ -113,4 +115,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
