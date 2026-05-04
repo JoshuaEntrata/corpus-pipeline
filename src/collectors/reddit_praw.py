@@ -154,63 +154,8 @@ def update_progress(progress, collected, skipped, failed):
     )
 
 
-def normalize_comment_record(comment, root_id):
-    parent_item_id = comment.get("parent_item_id") or comment.get("parent_id")
-    created_at_utc = comment.get("created_at_utc") or epoch_to_utc_iso(
-        comment.get("created_utc")
-    )
-    is_reply = comment.get("is_reply")
-    if is_reply is None:
-        is_reply = parent_item_id not in (None, root_id)
-
-    return {
-        "source_item_id": comment.get("source_item_id") or comment.get("id"),
-        "parent_item_id": parent_item_id,
-        "body": clean_text(comment.get("body")),
-        "created_at_utc": created_at_utc,
-        "is_reply": is_reply,
-    }
-
-
-def load_comment_records(row):
-    comments_value = row.get("comments_json") or row.get("comments") or "[]"
-    try:
-        comments = json.loads(comments_value)
-    except (TypeError, json.JSONDecodeError):
-        comments = []
-
-    root_id = row.get("source_item_id") or row.get("id")
-    return [
-        normalize_comment_record(comment, root_id)
-        for comment in comments
-        if isinstance(comment, dict)
-    ]
-
-
-def migrate_legacy_record(row):
-    """Map older Reddit scraper CSV shapes into the compact raw schema."""
-    source_item_id = row.get("source_item_id") or row.get("id")
-    comments = load_comment_records(row)
-
-    return {
-        "source_platform": row.get("source_platform") or "reddit",
-        "source_item_id": source_item_id,
-        "source_url": row.get("source_url") or row.get("url"),
-        "collection_method": row.get("collection_method") or "legacy",
-        "created_at_utc": row.get("created_at_utc")
-        or epoch_to_utc_iso(row.get("created_utc")),
-        "title": clean_text(row.get("title")),
-        "body_text": clean_text(
-            row.get("body_text") or row.get("submission") or row.get("selftext")
-        ),
-        "description": clean_text(row.get("description")),
-        "transcript": clean_text(row.get("transcript")),
-        "comments_json": json_dumps(comments),
-    }
-
-
 def ensure_output_csv():
-    """Create the raw CSV or migrate the legacy header before appending."""
+    """Create the raw CSV if it does not exist before appending."""
     if not output_csv.exists() or output_csv.stat().st_size == 0:
         with open(output_csv, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=RAW_FIELDNAMES)
@@ -224,22 +169,10 @@ def ensure_output_csv():
     if header == RAW_FIELDNAMES:
         return
 
-    with open(output_csv, "r", newline="", encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
-
-    backup_path = output_csv.with_name(
-        f"{output_csv.stem}_legacy_"
-        f"{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}{output_csv.suffix}"
+    raise ValueError(
+        f"Unexpected Reddit raw CSV header in {output_csv}: {header}. "
+        f"Expected {RAW_FIELDNAMES}."
     )
-    output_csv.replace(backup_path)
-
-    with open(output_csv, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=RAW_FIELDNAMES)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(migrate_legacy_record(row))
-
-    tqdm.write(f"reddit | migrate_schema | backup={backup_path}")
 
 
 def submission_exists(submission_id):
@@ -250,8 +183,7 @@ def submission_exists(submission_id):
         with open(output_csv, "r", newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                existing_id = row.get("source_item_id") or row.get("id")
-                if existing_id == submission_id:
+                if row.get("source_item_id") == submission_id:
                     return True
         return False
     except Exception as e:
