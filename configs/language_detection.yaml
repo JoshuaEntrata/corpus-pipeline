@@ -29,10 +29,13 @@ thresholds:
   min_rule_score: 1.0
   mixed_score_ratio: 0.35
 
+detectors:
+  fasttext_model_path: models/lid.176.ftz
+
 fallback:
   use_openai_when_uncertain: true
   use_openai_for_short_text: false
-  model: gpt-4o-mini
+  model: gpt-5.4-mini
 
 language_terms:
   english:

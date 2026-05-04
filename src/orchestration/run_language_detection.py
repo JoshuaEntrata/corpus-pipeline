@@ -33,10 +33,13 @@ DEFAULT_CONFIG = {
         "min_rule_score": 1.0,
         "mixed_score_ratio": 0.35,
     },
+    "detectors": {
+        "fasttext_model_path": "models/lid.176.ftz",
+    },
     "fallback": {
         "use_openai_when_uncertain": True,
         "use_openai_for_short_text": False,
-        "model": "gpt-4o-mini",
+        "model": "gpt-5.4-mini",
     },
 }
 
@@ -112,6 +115,10 @@ def row_id(row, text):
     )
 
 
+def row_source_platform(row):
+    return row.get("source_platform") or ""
+
+
 def is_valid_ai_healthcare(row):
     return row.get("ai_healthcare_label") == "valid_ai_healthcare"
 
@@ -145,9 +152,12 @@ def language_output_row(row, detection):
     text = row_text(row)
     return {
         "id": row_id(row, text),
+        "source_platform": row_source_platform(row),
         "text": text,
-        "ai_healthcare_label": row.get("ai_healthcare_label"),
         "language_label": detection["label"],
+        "detected_languages_json": json.dumps(
+            detection.get("languages") or [], ensure_ascii=False
+        ),
         "language_confidence": detection["confidence"],
         "language_detector_version": LANGUAGE_DETECTOR_VERSION,
         "detector_votes_json": json.dumps(

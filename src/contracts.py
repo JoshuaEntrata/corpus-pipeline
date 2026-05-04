@@ -23,6 +23,7 @@ NORMALIZED_TEXT_ROW_FIELDS = [
 ]
 
 CLASSIFICATION_FIELDS = [
+    "source_platform",
     "text",
     "ai_healthcare_label",
     "ai_healthcare_confidence",
@@ -34,9 +35,10 @@ CLASSIFICATION_FIELDS = [
 
 LANGUAGE_DETECTION_FIELDS = [
     "id",
+    "source_platform",
     "text",
-    "ai_healthcare_label",
     "language_label",
+    "detected_languages_json",
     "language_confidence",
     "language_detector_version",
     "detector_votes_json",

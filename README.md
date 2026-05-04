@@ -61,8 +61,8 @@ python -m src.orchestration.run_classification --use-model --max-model-calls 50
 ```
 
 Outputs are written to `data/classified/ai_healthcare_classified_<run_id>.csv`.
-The classified CSV keeps only the text, label, confidence, short reason,
-timestamp, and prefilter fields.
+The classified CSV keeps the source platform, text, label, confidence, short
+reason, timestamp, and prefilter fields.
 
 ## Language Detection
 
@@ -77,3 +77,9 @@ python -m src.orchestration.run_language_detection --no-openai-fallback
 ```
 
 Outputs are written to `data/language_detected/language_detected_<run_id>.csv`.
+The language CSV keeps the source platform, detected label, and
+`detected_languages_json`, which lists the base languages present for
+mixed-language rows.
+For another local detector signal, place the fastText language ID model at
+`models/lid.176.ftz` or update `detectors.fasttext_model_path` in
+`configs/language_detection.yaml`.

@@ -83,6 +83,59 @@ ai_terms:
     - teknolohiya
     - awtomasyon
     - automatiko
+  cebuano:
+    - ai
+    - a.i*
+    - artificial intelligence
+    - chatbot*
+    - algorithm*
+    - modelo
+    - teknolohiya
+    - awtomasyon
+    - automatiko
+    - machine learning*
+    - deep learning*
+    - data analytic*
+    - robot*
+    - virtual assistant*
+    - decision support*
+    - predictive model*
+    - computer vision*
+  ilocano:
+    - ai
+    - a.i*
+    - artificial intelligence
+    - chatbot*
+    - algorithm*
+    - modelo
+    - teknolohia
+    - automatiko
+    - machine learning*
+    - deep learning*
+    - data analytic*
+    - robot*
+    - virtual assistant*
+    - decision support*
+    - predictive model*
+    - computer vision*
+  hiligaynon:
+    - ai
+    - a.i*
+    - artificial intelligence
+    - chatbot*
+    - algorithm*
+    - modelo
+    - teknolohiya
+    - awtomasyon
+    - automatiko
+    - machine learning*
+    - deep learning*
+    - data analytic*
+    - robot*
+    - virtual assistant*
+    - decision support*
+    - predictive model*
+    - computer vision*
 
 health_terms:
   english:
@@ -250,3 +303,67 @@ health_terms:
     - bulong
     - pagbulong
     - pagbusong
+  cebuano:
+    - kahimsog
+    - panglawas
+    - doktor
+    - ospital
+    - pasyente
+    - sakit
+    - sintomas
+    - tambal
+    - pagtambal
+    - nars
+    - klinika
+    - konsultasyon
+    - bakuna
+    - impeksyon
+    - kanser
+    - diyabetis
+    - taas nga presyon
+    - hilanat
+    - pagmabdos
+    - dugo
+    - operasyon
+  ilocano:
+    - salun-at
+    - doktor
+    - ospital
+    - pasiente
+    - sakit
+    - sintomas
+    - agas
+    - panangagas
+    - nars
+    - klinika
+    - konsultasion
+    - bakuna
+    - impeksion
+    - kanser
+    - diabetes
+    - nangato a presion
+    - gurigor
+    - masikog
+    - dara
+    - operasyon
+  hiligaynon:
+    - panglawas
+    - doktor
+    - ospital
+    - pasyente
+    - balatian
+    - sintomas
+    - bulong
+    - pagbulong
+    - nars
+    - klinika
+    - konsultasyon
+    - bakuna
+    - impeksyon
+    - kanser
+    - diyabetis
+    - mataas nga presyon
+    - hilanat
+    - pagbusong
+    - dugo
+    - operasyon

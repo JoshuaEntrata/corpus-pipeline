@@ -40,7 +40,7 @@ DEFAULT_CONFIG = {
     "keywords_path": "configs/keywords.yaml",
     "classifier": {
         "version": CLASSIFIER_VERSION,
-        "model": "gpt-4o-mini",
+        "model": "gpt-5.4-mini",
         "use_model": True,
         "classify_likely_relevant_with_model": True,
         "max_model_calls": 100,
@@ -181,13 +181,19 @@ def row_text(row):
     )
 
 
-def classify_row(text, prefilter, use_model, classifier=None):
+def row_source_platform(row):
+    return row.get("source_platform") or ""
+
+
+def classify_row(row, text, prefilter, use_model, classifier=None):
     used_prefilter = True
+    source_platform = row_source_platform(row)
 
     if use_model and prefilter["needs_model"]:
         result = classifier.classify(text)
         return (
             {
+                "source_platform": source_platform,
                 "text": text,
                 "ai_healthcare_label": result["label"],
                 "ai_healthcare_confidence": result["confidence"],
@@ -201,6 +207,7 @@ def classify_row(text, prefilter, use_model, classifier=None):
 
     return (
         {
+            "source_platform": source_platform,
             "text": text,
             "ai_healthcare_label": prefilter["label"],
             "ai_healthcare_confidence": prefilter["confidence"],
@@ -299,7 +306,7 @@ def run_classification(
                 model_calls += 1
 
             classified, usage = classify_row(
-                text, prefilter, should_use_model, classifier
+                row, text, prefilter, should_use_model, classifier
             )
             if should_use_model:
                 model_verification_count += 1

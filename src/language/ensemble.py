@@ -1,10 +1,12 @@
 import re
 from itertools import combinations
+from pathlib import Path
 
 from src.config.keywords import keyword_pattern
 from src.language.openai_fallback import OpenAILanguageFallback
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LANGUAGE_DETECTOR_VERSION = "language_ensemble_v1"
 
 BASE_LANGUAGE_ORDER = [
@@ -38,7 +40,7 @@ DEFAULT_LANGUAGE_TERMS = {
     "hiligaynon": ["indi", "gid", "sang", "bulong", "balatian"],
 }
 
-LANGDETECT_CODE_MAP = {
+LANGUAGE_CODE_MAP = {
     "en": "english",
     "tl": "tagalog",
     "fil": "tagalog",
@@ -104,6 +106,31 @@ def label_languages(label):
     return {part for part in parts if part in BASE_LANGUAGE_ORDER}
 
 
+def ordered_languages(languages):
+    return [
+        language
+        for language in BASE_LANGUAGE_ORDER
+        if language in set(languages or [])
+    ]
+
+
+def languages_from_scores(scores, min_rule_score, mixed_score_ratio):
+    if not scores:
+        return []
+
+    sorted_scores = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    top_score = sorted_scores[0][1]
+    if top_score < min_rule_score:
+        return []
+
+    languages = [
+        language
+        for language, score in sorted_scores
+        if score >= min_rule_score and score / top_score >= mixed_score_ratio
+    ]
+    return ordered_languages(languages)
+
+
 def labels_compatible(left, right):
     if left == right:
         return True
@@ -148,9 +175,12 @@ class LanguageEnsembleDetector:
         self.target_label_set = set(self.target_labels)
         self.base_languages = configured_base_languages(self.target_label_set)
         self.thresholds = self.config.get("thresholds") or {}
+        self.detector_config = self.config.get("detectors") or {}
         self.fallback_config = self.config.get("fallback") or {}
         self.language_terms = merge_language_terms(self.config.get("language_terms"))
         self.term_language_counts = build_term_language_counts(self.language_terms)
+        self.fasttext_model = None
+        self.fasttext_status = None
         self.openai_fallback = OpenAILanguageFallback(
             model=self.fallback_config.get("model")
         )
@@ -250,6 +280,7 @@ class LanguageEnsembleDetector:
             from langdetect import DetectorFactory, detect_langs
         except ModuleNotFoundError:
             return {
+                "detector": "langdetect",
                 "label": "unavailable",
                 "confidence": 0.0,
                 "status": "langdetect_not_installed",
@@ -260,6 +291,7 @@ class LanguageEnsembleDetector:
             candidates = detect_langs(text)
         except Exception as exc:
             return {
+                "detector": "langdetect",
                 "label": "unknown",
                 "confidence": 0.0,
                 "status": f"error: {exc.__class__.__name__}",
@@ -267,7 +299,7 @@ class LanguageEnsembleDetector:
 
         alternatives = []
         for candidate in candidates:
-            label = LANGDETECT_CODE_MAP.get(candidate.lang, "unknown")
+            label = LANGUAGE_CODE_MAP.get(candidate.lang, "unknown")
             alternatives.append(
                 {
                     "code": candidate.lang,
@@ -277,41 +309,161 @@ class LanguageEnsembleDetector:
             )
 
         if not alternatives:
-            return {"label": "unknown", "confidence": 0.0, "alternatives": []}
+            return {
+                "detector": "langdetect",
+                "label": "unknown",
+                "confidence": 0.0,
+                "alternatives": [],
+            }
 
         best = alternatives[0]
         return {
+            "detector": "langdetect",
             "label": best["label"],
             "confidence": best["confidence"],
             "alternatives": alternatives[:3],
         }
 
-    def local_decision(self, rules, langdetect):
+    def fasttext_model_path(self):
+        configured_path = self.detector_config.get("fasttext_model_path")
+        if not configured_path:
+            return None
+        path = Path(configured_path)
+        return path if path.is_absolute() else PROJECT_ROOT / path
+
+    def load_fasttext_model(self):
+        if self.fasttext_status:
+            return self.fasttext_model
+
+        path = self.fasttext_model_path()
+        if path is None:
+            self.fasttext_status = "fasttext_model_not_configured"
+            return None
+        if not path.exists():
+            self.fasttext_status = "fasttext_model_not_found"
+            return None
+
+        try:
+            import fasttext
+        except ModuleNotFoundError:
+            self.fasttext_status = "fasttext_not_installed"
+            return None
+
+        try:
+            self.fasttext_model = fasttext.load_model(str(path))
+        except Exception as exc:
+            self.fasttext_status = f"fasttext_load_error: {exc.__class__.__name__}"
+            return None
+        self.fasttext_status = "available"
+        return self.fasttext_model
+
+    def fasttext_vote(self, text):
+        model = self.load_fasttext_model()
+        if model is None:
+            return {
+                "detector": "fasttext",
+                "label": "unavailable",
+                "confidence": 0.0,
+                "status": self.fasttext_status,
+                "model_path": str(self.fasttext_model_path() or ""),
+            }
+
+        labels, probabilities = model.predict(text.replace("\n", " "), k=3)
+        alternatives = []
+        for raw_label, probability in zip(labels, probabilities):
+            code = str(raw_label).replace("__label__", "")
+            alternatives.append(
+                {
+                    "code": code,
+                    "label": LANGUAGE_CODE_MAP.get(code, "unknown"),
+                    "confidence": round(float(probability), 3),
+                }
+            )
+
+        if not alternatives:
+            return {
+                "detector": "fasttext",
+                "label": "unknown",
+                "confidence": 0.0,
+                "alternatives": [],
+            }
+
+        best = alternatives[0]
+        return {
+            "detector": "fasttext",
+            "label": best["label"],
+            "confidence": best["confidence"],
+            "alternatives": alternatives,
+        }
+
+    def usable_external_votes(self, *votes):
+        return [
+            vote
+            for vote in votes
+            if vote.get("label") not in ("unavailable", "unknown")
+        ]
+
+    def local_decision(self, rules, langdetect, fasttext):
         rules_label = rules["label"]
         rules_confidence = float(rules["confidence"])
-        langdetect_label = langdetect.get("label", "unknown")
-        langdetect_confidence = float(langdetect.get("confidence") or 0.0)
+        external_votes = self.usable_external_votes(langdetect, fasttext)
 
         if rules_label != "unknown":
-            if langdetect_label in ("unavailable", "unknown"):
+            if not external_votes:
                 return rules_label, rules_confidence, "rules"
-            if labels_compatible(rules_label, langdetect_label):
-                confidence = max(rules_confidence, min(0.95, langdetect_confidence))
-                return rules_label, round(confidence, 3), "rules_langdetect_agree"
+            compatible_votes = [
+                vote for vote in external_votes if labels_compatible(rules_label, vote["label"])
+            ]
+            if compatible_votes:
+                confidence = max(
+                    rules_confidence,
+                    max(float(vote.get("confidence") or 0.0) for vote in compatible_votes),
+                )
+                return rules_label, round(min(0.95, confidence), 3), "rules_external_agree"
+            conflicting_strong_votes = [
+                vote
+                for vote in external_votes
+                if float(vote.get("confidence") or 0.0) >= self.strong_confidence()
+            ]
             if (
                 rules_confidence >= self.strong_confidence()
-                and langdetect_confidence < self.strong_confidence()
+                and not conflicting_strong_votes
             ):
                 return rules_label, rules_confidence, "rules_override"
-            return "unknown", round(min(rules_confidence, langdetect_confidence, 0.55), 3), "detector_disagreement"
+            disagreement_confidence = min(
+                [rules_confidence]
+                + [float(vote.get("confidence") or 0.0) for vote in external_votes]
+                + [0.55]
+            )
+            return "unknown", round(disagreement_confidence, 3), "detector_disagreement"
 
-        if (
-            langdetect_label not in ("unavailable", "unknown")
-            and langdetect_confidence >= self.strong_confidence()
-        ):
-            return langdetect_label, langdetect_confidence, "langdetect"
+        strong_votes = [
+            vote
+            for vote in external_votes
+            if float(vote.get("confidence") or 0.0) >= self.strong_confidence()
+        ]
+        if strong_votes:
+            best_vote = max(
+                strong_votes, key=lambda vote: float(vote.get("confidence") or 0.0)
+            )
+            incompatible_votes = [
+                vote
+                for vote in strong_votes
+                if not labels_compatible(best_vote["label"], vote["label"])
+            ]
+            if incompatible_votes:
+                return "unknown", 0.55, "detector_disagreement"
+            return (
+                best_vote["label"],
+                round(float(best_vote.get("confidence") or 0.0), 3),
+                best_vote.get("detector", "external_detector"),
+            )
 
-        return "unknown", max(rules_confidence, min(langdetect_confidence, 0.55)), "low_confidence"
+        best_confidence = max(
+            [rules_confidence]
+            + [min(float(vote.get("confidence") or 0.0), 0.55) for vote in external_votes]
+        )
+        return "unknown", best_confidence, "low_confidence"
 
     def fallback_needed(self, label, confidence, reason):
         if label == "too_short":
@@ -332,6 +484,26 @@ class LanguageEnsembleDetector:
             return mixed_label(languages, self.target_label_set) if languages else "mixed_other"
         return "unknown"
 
+    def component_languages(self, label, votes):
+        if label == "mixed_multiple":
+            fallback_languages = votes.get("openai_fallback", {}).get("languages")
+            if fallback_languages:
+                return ordered_languages(fallback_languages)
+            return languages_from_scores(
+                votes.get("rules", {}).get("scores") or {},
+                self.min_rule_score(),
+                self.mixed_score_ratio(),
+            )
+
+        languages = label_languages(label)
+        if languages:
+            return ordered_languages(languages)
+
+        fallback_languages = votes.get("openai_fallback", {}).get("languages")
+        if fallback_languages:
+            return ordered_languages(fallback_languages)
+        return []
+
     def detect(self, text):
         text = normalize_text(text)
         votes = {
@@ -344,10 +516,12 @@ class LanguageEnsembleDetector:
             votes["final"] = {
                 "label": label,
                 "confidence": confidence,
+                "languages": [],
                 "source": "length_rule",
             }
             return {
                 "label": label,
+                "languages": [],
                 "confidence": confidence,
                 "votes": votes,
                 "used_openai_fallback": False,
@@ -357,10 +531,12 @@ class LanguageEnsembleDetector:
 
         rules = self.rule_vote(text)
         langdetect = self.langdetect_vote(text)
+        fasttext = self.fasttext_vote(text)
         votes["rules"] = rules
         votes["langdetect"] = langdetect
+        votes["fasttext"] = fasttext
 
-        label, confidence, source = self.local_decision(rules, langdetect)
+        label, confidence, source = self.local_decision(rules, langdetect, fasttext)
         label = self.normalize_label(label)
         confidence = round(float(confidence), 3)
         votes["local"] = {
@@ -379,6 +555,7 @@ class LanguageEnsembleDetector:
                 fallback_confidence = round(float(fallback.get("confidence") or 0.0), 3)
                 votes["openai_fallback"] = {
                     "label": fallback_label,
+                    "languages": ordered_languages(fallback.get("languages") or []),
                     "confidence": fallback_confidence,
                     "reason_short": fallback.get("reason_short"),
                     "model_name": fallback.get("model_name"),
@@ -396,13 +573,16 @@ class LanguageEnsembleDetector:
                     "reason": skipped_reason,
                 }
 
+        languages = self.component_languages(label, votes)
         votes["final"] = {
             "label": label,
+            "languages": languages,
             "confidence": confidence,
             "source": source,
         }
         return {
             "label": label,
+            "languages": languages,
             "confidence": confidence,
             "votes": votes,
             "used_openai_fallback": used_fallback,

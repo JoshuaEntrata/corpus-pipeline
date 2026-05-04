@@ -35,6 +35,7 @@ normalized_text_rows:
 
 classification:
   fields:
+    source_platform: string
     text: string
     ai_healthcare_label: string
     ai_healthcare_confidence: float_or_string
@@ -46,9 +47,10 @@ classification:
 language_detection:
   fields:
     id: string
+    source_platform: string
     text: string
-    ai_healthcare_label: string
     language_label: string
+    detected_languages_json: json
     language_confidence: float_or_string
     language_detector_version: string
     detector_votes_json: json

@@ -4,7 +4,7 @@ keywords_path: configs/keywords.yaml
 
 classifier:
   version: ai_healthcare_classifier_v1
-  model: gpt-4o-mini
+  model: gpt-5.4-mini
   use_model: true
   classify_likely_relevant_with_model: true
   max_model_calls: 100

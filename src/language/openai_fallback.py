@@ -11,7 +11,7 @@ if load_dotenv is not None:
     load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 
-DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_MODEL = "gpt-5.4-mini"
 
 SYSTEM_PROMPT = """You detect language for short social-media text about AI in healthcare.
 Use only the provided text. Do not infer from source, topic, author, or missing context.
@@ -22,16 +22,30 @@ If exactly two allowed languages are clearly present, use the matching mixed_<la
 If three or more allowed languages are clearly present, use mixed_multiple.
 If the text mixes an allowed language with another unsupported language, use mixed_other.
 If the text is too short to judge, use too_short.
-If there is enough text but the language remains unclear, use unknown."""
+If there is enough text but the language remains unclear, use unknown.
+Return the base languages that are clearly present in the languages array."""
 
 
 def output_schema(target_labels):
     return {
         "type": "object",
         "additionalProperties": False,
-        "required": ["label", "confidence", "reason_short"],
+        "required": ["label", "languages", "confidence", "reason_short"],
         "properties": {
             "label": {"type": "string", "enum": list(target_labels)},
+            "languages": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "enum": [
+                        "english",
+                        "tagalog",
+                        "cebuano",
+                        "ilocano",
+                        "hiligaynon",
+                    ],
+                },
+            },
             "confidence": {"type": "number", "minimum": 0, "maximum": 1},
             "reason_short": {"type": "string"},
         },
@@ -119,4 +133,3 @@ class OpenAILanguageFallback:
         result["model_name"] = self.model
         result["usage"] = usage_to_dict(response)
         return result
-

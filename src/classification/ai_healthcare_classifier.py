@@ -18,7 +18,7 @@ from src.classification.prompts import (
 )
 
 
-DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_MODEL = "gpt-5.4-mini"
 
 
 def extract_output_text(response):
