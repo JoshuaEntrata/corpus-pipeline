@@ -2,7 +2,7 @@ run:
   save_raw: true
   skip_existing_ids: true
   log_level: INFO
-  rate_limit_sec: 2
+  rate_limit_sec: 0.25
   limit_per_query: 50
   registry_path: data/registry/collected_ids.csv
 

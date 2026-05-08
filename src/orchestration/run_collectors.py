@@ -329,12 +329,12 @@ def run_reddit(config, args, registry, results, run_id):
         )
         add_result(results, "reddit", "subreddit_keyword", collected, skipped, failed)
 
-    if "keyword" in modes:
-        keywords = read_csv_column(inputs["keywords"], inputs["keyword_column"])
-        collected, skipped, failed = reddit_praw.scrape_by_keywords(
-            keywords, limit_per_query=limit, rate_limit_sec=rate_limit, run_id=run_id
-        )
-        add_result(results, "reddit", "keyword", collected, skipped, failed)
+    # if "keyword" in modes:
+    #     keywords = read_csv_column(inputs["keywords"], inputs["keyword_column"])
+    #     collected, skipped, failed = reddit_praw.scrape_by_keywords(
+    #         keywords, limit_per_query=limit, rate_limit_sec=rate_limit, run_id=run_id
+    #     )
+    #     add_result(results, "reddit", "keyword", collected, skipped, failed)
 
     refresh_registry(registry, source_config["output_path"], "reddit")
 
@@ -467,7 +467,9 @@ def main():
     results = []
 
     selected_sources = (
-        list(config.get("collectors", {}).keys()) if args.source == "all" else [args.source]
+        list(config.get("collectors", {}).keys())
+        if args.source == "all"
+        else [args.source]
     )
 
     for source in selected_sources:
