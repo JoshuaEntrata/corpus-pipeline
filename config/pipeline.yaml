@@ -1,0 +1,32 @@
+run:
+  timezone: UTC
+  run_id_format: "%Y%m%dT%H%M%SZ"
+
+paths:
+  inputs_dir: inputs
+  local_data_dir: local_data
+  logs_dir: logs
+  master_dir: local_data/master
+
+stages:
+  extraction:
+    enabled: true
+    skip_seen_ids: true
+    platforms:
+      reddit: true
+      youtube: true
+      twitter: false
+  preprocessing:
+    enabled: true
+    skip_seen_ids: true
+  classification:
+    enabled: true
+    skip_seen_ids: true
+  language_detection:
+    enabled: true
+    skip_seen_ids: true
+    input: classification_valid_only
+
+outputs:
+  snapshot_mode: full_output
+  encoding: utf-8

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "corpus-pipeline"
+version = "0.1.0"
+description = "ETL pipeline for social platform corpora and AI-in-healthcare language detection."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "python-dotenv>=1.0.1",
+  "PyYAML>=6.0.1",
+  "openai>=1.82.0",
+  "requests>=2.32.0",
+  "tqdm>=4.67.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.2.0"]
+reddit = ["praw>=7.7.1"]
+youtube = ["google-api-python-client>=2.130.0"]
+language = ["fasttext-wheel>=0.9.2"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

@@ -1,0 +1,21 @@
+openai:
+  endpoint: responses
+  classification_model: gpt-5.4-mini
+  language_model: gpt-5.4-mini
+  temperature: 0
+  reasoning_effort: low
+  classification_batch_size: 20
+  language_batch_size: 20
+  max_retries: 3
+  timeout_seconds: 60
+  prompt_cache_retention: in_memory
+  prompt_cache_key_prefix: ai_health_etl
+
+pricing:
+  pricing_updated_at_utc: "2026-05-24T00:00:00Z"
+  pricing_source: openai_api_pricing_docs
+  models:
+    gpt-5.4-mini:
+      input_usd_per_1m_tokens: 0.75
+      cached_input_usd_per_1m_tokens: 0.075
+      output_usd_per_1m_tokens: 4.50

@@ -1,0 +1,33 @@
+supported_languages:
+  - english
+  - tagalog
+  - cebuano
+  - ilocano
+  - hiligaynon
+
+language_order:
+  - english
+  - tagalog
+  - cebuano
+  - ilocano
+  - hiligaynon
+
+fasttext:
+  model_path: models/lid.176.ftz
+  confidence_threshold: 0.75
+  mixed_confidence_threshold: 0.30
+  top_k: 3
+  label_map:
+    en: english
+    tl: tagalog
+    ceb: cebuano
+    ilo: ilocano
+
+fallback:
+  use_gpt_for_low_confidence: true
+  use_gpt_for_possible_hiligaynon: true
+  max_languages_per_row: 3
+
+labels:
+  out_of_scope: out_of_scope
+  mixed_prefix: mixed
