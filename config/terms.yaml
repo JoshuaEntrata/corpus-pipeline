@@ -1,0 +1,625 @@
+ai_terms:
+  english:
+    - ai
+    - a.i*
+    - ai-*
+    - artificial intelligence
+    - openai
+    - chatgpt
+    - gpt
+    - gpt-4
+    - gpt-4o
+    - llm
+    - large language model*
+    - generative ai
+    - anthropic
+    - claude
+    - gemini
+    - deepmind
+    - llama
+    - copilot
+    - openevidence
+    - open evidence
+    - med-palm
+    - medpalm
+    - medical ai
+    - clinical ai
+    - machine learning*
+    - deep learning*
+    - data science
+    - data analytic*
+    - neural network*
+    - transformer*
+    - embedding*
+    - chatbot*
+    - algorithm*
+    - ai model*
+    - language model*
+    - foundation model*
+    - natural language processing
+    - nlp*
+    - virtual assistant*
+    - decision support*
+    - clinical decision support*
+    - automation*
+    - automated
+    - ai scribe
+    - ambient scribe
+    - speech recognition*
+    - computer vision*
+    - computer*
+    - computing
+    - gpu*
+    - graphics processing unit*
+    - processor*
+    - cuda
+    - cloud computing
+    - predictive analytics
+    - predictive model*
+    - analytic*
+    - robot*
+    - autonomous*
+    - ai-generate*
+    - digital
+    - train data
+    - training data
+    - reinforcement learning
+    - classification
+    - detection
+    - linear regression
+    - logistic regression
+    - decision tree*
+    - summariz*
+    - transcrib*
+    - n8n
+    - gohighlevel
+    - ghl
+    - medgemma
+    - genai
+    - agentic ai
+    - deepseek
+    - grok
+    - xai
+    - qwen
+    - mistral
+    - perplexity
+    - meta ai
+    - biogpt
+    - biobert
+    - clinicalbert
+    - pubmedbert
+    - medbert
+    - meditron
+    - multimodal ai
+    - multimodal model*
+    - rag
+    - prompt*
+    - prompt engineering
+    - vector database*
+    - semantic search
+    - retrieval augmented generation
+    - risk prediction
+    - risk stratification
+    - deterioration prediction
+    - readmission prediction
+    - mortality prediction
+    - medical summariz*
+    - clinical summariz*
+    - ehr summariz*
+    - medical transcription
+    - med-gemini
+    - azure health
+    - pill
+    - pills
+
+  filipino_common:
+    - ai
+    - artificial intelligence
+    - chatbot
+    - algorithm
+    - modelo
+    - teknolohiya
+    - awtomasyon
+    - automatiko
+    - artipisyal na intelihensiya
+    - artipisyal na katalinuhan
+    - likhang-isip na intelihensiya
+    - generative ai
+    - genai
+    - ai assistant
+    - ai agent
+    - copilot
+    - machine learning
+    - deep learning
+    - predictive model
+    - awtomatikong sistema
+    - matalinong sistema
+    - digital assistant
+    - virtual assistant
+    - symptom checker
+    - ai triage
+    - ai scribe
+    - transkripsyon
+    - awtomatikong dokumentasyon
+    - BantAI
+    - AIKasalig
+
+  cebuano:
+    - ai
+    - a.i*
+    - artificial intelligence
+    - chatbot*
+    - algorithm*
+    - modelo
+    - teknolohiya
+    - awtomasyon
+    - automatiko
+    - machine learning*
+    - deep learning*
+    - data analytic*
+    - robot*
+    - virtual assistant*
+    - decision support*
+    - predictive model*
+    - computer vision*
+    - vision language model*
+    - diffusion model*
+    - synthetic data
+    - generative ai
+    - genai
+    - ai assistant
+    - ai agent
+    - copilot
+    - matalinong sistema
+    - awtomatikong sistema
+    - symptom checker
+    - ai triage
+    - ai scribe
+    - transkripsyon
+
+  ilocano:
+    - ai
+    - a.i*
+    - artificial intelligence
+    - chatbot*
+    - algorithm*
+    - modelo
+    - teknolohia
+    - automatiko
+    - machine learning*
+    - deep learning*
+    - data analytic*
+    - robot*
+    - virtual assistant*
+    - decision support*
+    - predictive model*
+    - computer vision*
+    - generative ai
+    - genai
+    - ai assistant
+    - ai agent
+    - copilot
+    - nasirib a sistema
+    - automatiko a sistema
+    - symptom checker
+    - ai triage
+    - ai scribe
+    - transkripsion
+
+  hiligaynon:
+    - ai
+    - a.i*
+    - artificial intelligence
+    - chatbot*
+    - algorithm*
+    - modelo
+    - teknolohiya
+    - awtomasyon
+    - automatiko
+    - machine learning*
+    - deep learning*
+    - data analytic*
+    - robot*
+    - virtual assistant*
+    - decision support*
+    - predictive model*
+    - computer vision*
+    - generative ai
+    - genai
+    - ai assistant
+    - ai agent
+    - copilot
+    - mainalamon nga sistema
+    - awtomatik nga sistema
+    - symptom checker
+    - ai triage
+    - ai scribe
+    - transkripsyon
+
+health_terms:
+  english:
+    - health*
+    - med
+    - meds
+    - medical*
+    - medicine*
+    - medication*
+    - medtech
+    - med school
+    - doctor*
+    - nurse*
+    - nursing
+    - hospital*
+    - clinic*
+    - patient*
+    - diagnos*
+    - treat*
+    - symptom*
+    - disease*
+    - diseases
+    - illness*
+    - disorder*
+    - public health
+    - mental health
+    - radiolog*
+    - pharmac*
+    - surg*
+    - clinical*
+    - health record*
+    - medical record*
+    - emr
+    - ehr
+    - telehealth*
+    - telemedicine*
+    - triage
+    - emergency room*
+    - er
+    - icu
+    - laborator*
+    - lab
+    - labs
+    - lab result*
+    - blood
+    - blood test*
+    - vital sign*
+    - blood pressure
+    - glucose
+    - insulin*
+    - vaccin*
+    - infect*
+    - sepsis
+    - cancer*
+    - tumor*
+    - oncolog*
+    - chemotherapy
+    - radiotherapy
+    - biopsy
+    - screening
+    - covid*
+    - influenza
+    - flu
+    - pneumonia
+    - tuberculosis
+    - tb
+    - dengue
+    - malaria
+    - hiv
+    - hiv/aids
+    - hepatitis
+    - diabetes
+    - hypertension
+    - heart
+    - cardiovascular disease*
+    - stroke
+    - asthma
+    - copd
+    - kidney
+    - renal
+    - alzheimer
+    - dementia
+    - depress*
+    - anxiety
+    - arthritis
+    - obesity
+    - chronic disease*
+    - pregnant
+    - pregnancy
+    - maternal health
+    - cardiolog*
+    - neurolog*
+    - patholog*
+    - derma*
+    - dermatolog*
+    - therap*
+    - psychiat*
+    - psycholog*
+    - psychotherap*
+    - endocrinolog*
+    - gastroenterolog*
+    - nephrolog*
+    - pulmonolog*
+    - urolog*
+    - hematolog*
+    - pediatric*
+    - geriatric*
+    - obstetric*
+    - gynecolog*
+    - physical therap*
+    - occupational therap*
+    - respiratory therap*
+    - speech therap*
+    - physiotherap*
+    - physician*
+    - clinician*
+    - practitioner*
+    - specialist*
+    - paramedic*
+    - dentist*
+    - dietitian*
+    - nutritionist*
+    - midwife
+    - xray*
+    - x-ray*
+    - sick
+    - sickness
+    - nausea
+    - muscle*
+    - bone*
+    - brain
+    - diet
+    - weight
+    - height
+    - fitness
+    - icd
+    - icd-10
+    - cpt
+    - hmo
+    - philhealth
+    - doh
+    - department of health
+    - barangay health center*
+    - rural health unit*
+    - mri
+    - medical imag*
+    - mental
+    - psychosis
+    - wellness
+    - pancreati*
+    - test result*
+    - care
+    - pharma*
+    - pimples
+    - exercise*
+    - body
+    - HIV
+    - AID*
+    - hiv/aid*
+    - skincare
+    - supplement*
+    - drug*
+    - calorie*
+    - emotional
+    - consult*
+    - depression
+    - sugar
+    - health concerns
+    - rashes
+    - consultation
+    - 2d echo
+    - ultrasound
+    - ct scan
+    - autis*
+    - cyst
+    - pelvic
+    - skin
+    - swollen
+    - miscarriage
+    - maternity
+    - pedia
+    - fat globules
+    - hemangioma
+    - medication
+    - fluids
+    - semen
+    - vagina
+    - penis
+    - uterus
+    - ovary
+    - breast*
+    - ob-gyne
+    - uric acid
+    - gout
+    - nutrition
+    - dehydration
+    - inflammation
+    - stress
+    - self-diagnos*
+    - birth
+    - birth-control
+    - birth control
+    - butt
+    - irritation
+    - breastfeed
+    - nose
+    - mouth
+    - trauma
+    - checkup
+    - check-up
+    - lactation
+    - vitamin*
+    - doc chatgpt
+    - down syndrome
+    - cough
+    - colds
+    - keto
+    - lowcarb*
+    - carb*
+    - fat*
+    - urinalysis
+    - hematology
+    - ulcer
+    - heartbeat
+    - acidic
+    - face
+    - neck
+    - hair
+    - forehead
+    - eyebrow*
+    - armpit*
+    - onco*
+    - bp
+    - hipaa
+    - blindness
+    - protein*
+    - antibiotic*
+    - covid-19
+    - ct scan*
+    - pet scan*
+    - mammogram
+    - surgery
+    - intensive care
+    - pet/ct
+    - cervical
+    - colonoscopy
+
+  filipino_common:
+    - kalusugan
+    - pangkalusugan
+    - doktor
+    - duktor
+    - ospital
+    - pasyente
+    - sakit
+    - sintomas
+    - gamot
+    - lunas
+    - paggamot
+    - nars
+    - klinika*
+    - konsultasyon
+    - bakuna
+    - impeksyon
+    - kanser
+    - diyabetis
+    - altapresyon
+    - alta presyon
+    - presyon
+    - pagbubuntis
+    - panglawas
+    - tambal
+    - kahimsog
+    - pagtambal
+    - hilanat
+    - salun-at
+    - pasiente
+    - agas
+    - panangagas
+    - balatian
+    - bulong
+    - pagbulong
+    - pagbusong
+    - magbuntis
+    - nagbuntis
+    - konsulta
+    - depresyon
+    - dibdib
+    - symptomas
+    - nakapanganak
+    - nagpacheck-up
+    - magpacheck-up
+    - nagka-rashes
+    - nagkarashes
+    - puso
+    - utak
+    - bituka
+    - balat
+    - buto
+    - bungo
+    - doh
+    - department of health
+    - reseta
+    - nararamdaman
+    - katawan
+    - parmasyutika
+    - genomika
+    - genetiko
+    - biogesic
+    - medisina
+    - karamdaman
+    - malasakit
+    - mata
+
+  cebuano:
+    - kahimsog
+    - panglawas
+    - doktor
+    - ospital
+    - pasyente
+    - sakit
+    - sintomas
+    - tambal
+    - pagtambal
+    - nars
+    - klinika
+    - konsultasyon
+    - bakuna
+    - impeksyon
+    - kanser
+    - diyabetis
+    - taas nga presyon
+    - hilanat
+    - pagmabdos
+    - dugo
+    - operasyon
+    - kaka-ChatGPT
+    - kakachatgpt
+    - carcinogenic
+
+  ilocano:
+    - salun-at
+    - doktor
+    - ospital
+    - pasiente
+    - sakit
+    - sintomas
+    - agas
+    - panangagas
+    - nars
+    - klinika
+    - konsultasion
+    - bakuna
+    - impeksion
+    - kanser
+    - diabetes
+    - nangato a presion
+    - gurigor
+    - masikog
+    - dara
+    - operasyon
+
+  hiligaynon:
+    - panglawas
+    - doktor
+    - ospital
+    - pasyente
+    - balatian
+    - sintomas
+    - bulong
+    - pagbulong
+    - nars
+    - klinika
+    - konsultasyon
+    - bakuna
+    - impeksyon
+    - kanser
+    - diyabetis
+    - mataas nga presyon
+    - hilanat
+    - pagbusong
+    - dugo
+    - operasyon
+
+matching:
+  case_sensitive: false
+  use_word_boundaries: true
+  normalize_unicode: true

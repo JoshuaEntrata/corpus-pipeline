@@ -1,0 +1,11 @@
+.env
+logs/
+local_data/
+*.log
+__pycache__/
+.pytest_cache/
+.venv/
+*.pyc
+*.egg-info/
+models/*.bin
+models/*.ftz
