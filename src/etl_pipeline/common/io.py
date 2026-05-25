@@ -48,6 +48,11 @@ def append_csv(path: str | Path, rows: Iterable[dict[str, Any]], fieldnames: lis
     csv_path = Path(path)
     ensure_parent(csv_path)
     write_header = not csv_path.exists() or csv_path.stat().st_size == 0
+    if not write_header:
+        with csv_path.open("r", encoding="utf-8", newline="") as handle:
+            existing_header = next(csv.reader(handle), [])
+        if existing_header != fieldnames:
+            write_csv(csv_path, read_csv(csv_path), fieldnames)
     with csv_path.open("a", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
         if write_header:
@@ -90,4 +95,3 @@ def json_loads(value: Any, fallback: Any) -> Any:
         return json.loads(value)
     except json.JSONDecodeError:
         return fallback
-

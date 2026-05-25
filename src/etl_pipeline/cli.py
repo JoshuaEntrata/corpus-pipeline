@@ -10,6 +10,7 @@ from etl_pipeline.common.logging import setup_logging
 from etl_pipeline.common.paths import ensure_base_dirs, logs_dir
 from etl_pipeline.common.time import make_run_id
 from etl_pipeline.extraction.manager import run_extraction
+from etl_pipeline.extraction.manual_upload import run_manual_upload_extraction
 from etl_pipeline.language_detection.run import run_language_detection
 from etl_pipeline.preprocessing.run import run_preprocessing
 
@@ -51,6 +52,12 @@ def main(argv: list[str] | None = None) -> int:
             run_id=run_id,
             force=args.force,
         ),
+        "manual-upload": lambda: run_manual_upload_extraction(
+            config,
+            run_id=run_id,
+            input_dir=args.input,
+            output_path=args.output,
+        ),
         "preprocess": lambda: run_preprocessing(
             config, run_id=run_id, input_path=args.input, force=args.force, limit=args.limit
         ),
@@ -70,12 +77,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="etl-pipeline")
     parser.add_argument(
         "command",
-        choices=["extract", "preprocess", "classify", "detect-language", "run-all"],
+        choices=["extract", "manual-upload", "preprocess", "classify", "detect-language", "run-all"],
     )
     parser.add_argument("--config", default="config/pipeline.yaml")
     parser.add_argument("--inputs")
     parser.add_argument("--run-id")
     parser.add_argument("--input")
+    parser.add_argument("--output")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--force", action="store_true")
     return parser

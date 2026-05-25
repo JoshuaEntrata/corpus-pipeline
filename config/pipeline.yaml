@@ -8,6 +8,10 @@ paths:
   logs_dir: logs
   master_dir: local_data/master
 
+manual_upload:
+  input_dir: local_data/manual_upload
+  output_file: local_data/manual/manual_extraction_raw.csv
+
 stages:
   extraction:
     enabled: true

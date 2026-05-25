@@ -71,6 +71,18 @@ def run_classification(
                 skipped_existing += 1
                 pbar.update(1)
                 continue
+            provided_classification = _provided_label(row, "provided_classification_label", "classification_label")
+            if provided_classification:
+                output = _classification_output(row, "provided_label", "provided_label", provided_classification)
+                output_rows.append(output)
+                seen.add(key)
+                _persist_classification_output(
+                    output, all_run_path, valid_run_path, all_master_path, valid_master_path, state_path
+                )
+                pbar.update(1)
+                pbar.set_postfix(estimated_cost_usd=_cost_so_far(total_usage, models_config, model))
+                continue
+
             available_terms = matcher.classify_available_terms(row.get("text", ""))
             if available_terms == WITH_AI_AND_HEALTH_TERMS:
                 pending_gpt.append(
@@ -224,6 +236,14 @@ def _classification_output(
         "model_used": model_used,
         "model_classification": model_classification,
     }
+
+
+def _provided_label(row: dict[str, Any], *fields: str) -> str:
+    for field in fields:
+        value = str(row.get(field, "") or "").strip()
+        if value:
+            return value
+    return ""
 
 
 def _persist_classification_output(

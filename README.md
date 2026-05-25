@@ -23,6 +23,7 @@ Twitter/X extraction uses `requests`.
 
 ```bash
 python -m etl_pipeline.cli extract --config config/pipeline.yaml --inputs inputs
+python -m etl_pipeline.cli manual-upload --config config/pipeline.yaml
 python -m etl_pipeline.cli preprocess --config config/pipeline.yaml
 python -m etl_pipeline.cli classify --config config/pipeline.yaml
 python -m etl_pipeline.cli detect-language --config config/pipeline.yaml
@@ -34,6 +35,7 @@ Useful flags:
 ```bash
 --run-id 20260524T000000Z
 --input local_data/master/standardized.csv
+--output local_data/manual/manual_extraction_raw.csv
 --limit 100
 --force
 ```
@@ -60,6 +62,15 @@ stages:
       youtube: true
       twitter: false
 ```
+
+Manual uploads can be normalized from `local_data/manual_upload/*.csv`:
+
+```bash
+python -m etl_pipeline.cli manual-upload --config config/pipeline.yaml
+python -m etl_pipeline.cli preprocess --config config/pipeline.yaml --input local_data/manual/manual_extraction_raw.csv
+```
+
+If an input row includes `provided_classification_label` or `provided_language_label`, the corresponding stage uses that value directly and skips model labeling for that row.
 
 ## Data Flow
 

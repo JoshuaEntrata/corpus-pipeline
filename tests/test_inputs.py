@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from etl_pipeline.common.io import append_csv, read_csv
 from etl_pipeline.extraction.inputs import load_input_jobs
 
 
@@ -28,3 +29,15 @@ def test_load_input_jobs_accepts_ids_header(tmp_path: Path) -> None:
     jobs = load_input_jobs(tmp_path)
 
     assert jobs["reddit"]["jobs"][0]["ids"] == ["abc"]
+
+
+def test_append_csv_migrates_existing_header(tmp_path: Path) -> None:
+    path = tmp_path / "rows.csv"
+    append_csv(path, [{"id": "1", "text": "old"}], ["id", "text"])
+    append_csv(path, [{"id": "2", "text": "new", "label": "provided"}], ["id", "text", "label"])
+
+    assert path.read_text(encoding="utf-8").splitlines()[0] == "id,text,label"
+    assert read_csv(path) == [
+        {"id": "1", "text": "old", "label": ""},
+        {"id": "2", "text": "new", "label": "provided"},
+    ]
