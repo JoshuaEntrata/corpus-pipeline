@@ -9,6 +9,8 @@ EXTRACTION_FIELDS = [
     "url",
     "comments_json",
     "metadata_json",
+    "provided_language_label",
+    "provided_classification_label",
     "extracted_at_utc",
 ]
 
@@ -18,4 +20,3 @@ def normalize_extraction_row(row: dict) -> dict:
     normalized["comments_json"] = normalized.get("comments_json") or "[]"
     normalized["metadata_json"] = normalized.get("metadata_json") or "{}"
     return normalized
-

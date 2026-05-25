@@ -60,6 +60,13 @@ def run_language_detection(
                 skipped_existing += 1
                 pbar.update(1)
                 continue
+            provided_language = _provided_label(row, "provided_language_label", "language_label")
+            if provided_language:
+                output_rows.append(_language_output(row, [provided_language], provided_language, "provided_label"))
+                seen.add(key)
+                pbar.update(1)
+                pbar.set_postfix(estimated_cost_usd=_cost_so_far(total_usage, models_config, model))
+                continue
 
             result = fasttext_detector.detect(row.get("text", ""))
             if result.needs_gpt_fallback and language_config.get("fallback", {}).get("use_gpt_for_low_confidence", True):
@@ -185,11 +192,20 @@ def _language_output(row: dict[str, Any], languages: list[str], label: str, dete
         "text": row.get("text", ""),
         "category": row.get("category", ""),
         "associated_id": row.get("associated_id", ""),
+        "provided_language_label": row.get("provided_language_label", ""),
         "language_detected": json_dumps(languages, []),
         "language_label": label,
         "language_detected_at_utc": utc_now_iso(),
         "model_classification": detector_used,
     }
+
+
+def _provided_label(row: dict[str, Any], *fields: str) -> str:
+    for field in fields:
+        value = str(row.get(field, "") or "").strip()
+        if value:
+            return value
+    return ""
 
 
 def _cost_so_far(usage: TokenUsage, models_config: dict[str, Any], model: str) -> float:

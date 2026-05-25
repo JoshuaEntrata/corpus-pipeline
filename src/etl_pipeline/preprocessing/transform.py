@@ -44,6 +44,8 @@ def transform_extraction_rows(raw_rows: list[dict[str, Any]]) -> tuple[list[dict
             "category": ROOT_CATEGORY.get(platform, "post"),
             "associated_id": root_id,
             "source_url": str(raw.get("url", "") or ""),
+            "provided_language_label": str(raw.get("provided_language_label", "") or ""),
+            "provided_classification_label": str(raw.get("provided_classification_label", "") or ""),
         }
         _append_if_valid(root_row, output, seen, stats)
 
@@ -83,6 +85,10 @@ def _comment_to_row(comment: dict[str, Any], raw: dict[str, Any], root_id: str, 
         "category": category,
         "associated_id": root_id,
         "source_url": str(comment.get("url", "") or raw.get("url", "") or ""),
+        "provided_language_label": str(comment.get("provided_language_label") or raw.get("provided_language_label", "") or ""),
+        "provided_classification_label": str(
+            comment.get("provided_classification_label") or raw.get("provided_classification_label", "") or ""
+        ),
     }
 
 
@@ -109,4 +115,3 @@ def _append_if_valid(
     seen.add(key)
     output.append(row)
     return True
-
