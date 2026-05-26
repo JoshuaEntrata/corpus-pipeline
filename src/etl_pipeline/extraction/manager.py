@@ -6,7 +6,7 @@ from typing import Any
 
 from etl_pipeline.common.config import ConfigError, should_skip_seen
 from etl_pipeline.common.ids import extraction_key
-from etl_pipeline.common.io import append_csv, json_dumps, write_csv, write_json
+from etl_pipeline.common.io import append_csv, json_dumps, write_json
 from etl_pipeline.common.logging import log_stage_error
 from etl_pipeline.common.paths import logs_dir, master_dir, stage_run_dir, state_dir
 from etl_pipeline.common.state import append_state_rows, extraction_master_keys, read_state_keys
@@ -102,15 +102,12 @@ def run_extraction(
                                 id_or_query=normalized["id"],
                                 error=exc,
                             )
-                    rows_by_platform[platform].append(normalized)
                     seen.add(key)
+                    rows_by_platform[platform].append(normalized)
+                    _persist_extraction_row(normalized, run_dir, master_path, state_path)
                 pbar.update(1)
 
     all_rows = [row for platform_rows in rows_by_platform.values() for row in platform_rows]
-    for platform in EXTRACTOR_REGISTRY:
-        write_csv(run_dir / f"{platform}.csv", rows_by_platform.get(platform, []), EXTRACTION_FIELDS)
-    append_csv(master_path, all_rows, EXTRACTION_FIELDS)
-    append_state_rows(state_path, "extraction", all_rows, lambda row: extraction_key(row["platform"], row["id"]))
 
     summary = {
         "stage": "extraction",
@@ -128,6 +125,12 @@ def run_extraction(
     }
     write_json(run_dir / "summary.json", summary)
     return summary
+
+
+def _persist_extraction_row(row: dict[str, Any], run_dir: Path, master_path: Path, state_path: Path) -> None:
+    append_csv(master_path, [row], EXTRACTION_FIELDS)
+    append_csv(run_dir / f"{row.get('platform', 'unknown')}.csv", [row], EXTRACTION_FIELDS)
+    append_state_rows(state_path, "extraction", [row], lambda item: extraction_key(item["platform"], item["id"]))
 
 
 def _run_job(extractor: Any, job: dict[str, Any]) -> list[dict]:
