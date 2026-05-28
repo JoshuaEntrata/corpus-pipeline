@@ -34,6 +34,7 @@ def run_classification(
     models_path: str | Path = "config/models.yaml",
     force: bool = False,
     limit: int | None = None,
+    prefilter_only: bool = False,
 ) -> dict[str, Any]:
     source_path = Path(input_path) if input_path else master_dir(pipeline_config) / "standardized.csv"
     input_rows = read_csv(source_path)
@@ -55,12 +56,71 @@ def run_classification(
     classifier: GPTClassifier | None = None
     total_usage = TokenUsage()
     rows_sent_to_gpt = 0
+    gpt_candidate_count = 0
+    provided_label_count = 0
+    rule_filtered_count = 0
     skipped_existing = 0
     output_rows: list[dict[str, Any]] = []
 
     run_dir = stage_run_dir(pipeline_config, "classification", run_id)
     all_run_path = run_dir / "classification_all.csv"
     valid_run_path = run_dir / "classification_valid_only.csv"
+
+    if prefilter_only:
+        with tqdm(total=len(input_rows), desc="classification_prefilter", unit="row") as pbar:
+            for row in input_rows:
+                key = row_key_from_record(row)
+                if key in seen:
+                    skipped_existing += 1
+                    pbar.update(1)
+                    continue
+                if _provided_label(row, "provided_classification_label", "classification_label"):
+                    provided_label_count += 1
+                    output = _classification_output(row, "provided_label", "prefilter_only", "provided_label")
+                    output_rows.append(output)
+                    seen.add(key)
+                    _persist_classification_output(
+                        output, all_run_path, valid_run_path, all_master_path, valid_master_path, state_path
+                    )
+                    pbar.update(1)
+                    continue
+                available_terms = matcher.classify_available_terms(row.get("text", ""))
+                if available_terms == WITH_AI_AND_HEALTH_TERMS:
+                    gpt_candidate_count += 1
+                    model_classification = available_terms
+                else:
+                    rule_filtered_count += 1
+                    model_classification = _rule_label_for_terms(available_terms)
+                output = _classification_output(row, available_terms, "prefilter_only", model_classification)
+                output_rows.append(output)
+                seen.add(key)
+                _persist_classification_output(
+                    output, all_run_path, valid_run_path, all_master_path, valid_master_path, state_path
+                )
+                pbar.update(1)
+
+        write_csv(all_run_path, read_csv(all_run_path), CLASSIFICATION_FIELDS)
+        write_csv(valid_run_path, read_csv(valid_run_path), CLASSIFICATION_FIELDS)
+        summary = {
+            "stage": "classification",
+            "run_id": run_id,
+            "mode": "prefilter_only",
+            "input_rows": len(input_rows),
+            "new_rows_processed": len(output_rows),
+            "skipped_existing_rows": skipped_existing,
+            "provided_label_rows": provided_label_count,
+            "rule_filtered_rows": rule_filtered_count,
+            "gpt_candidate_rows": gpt_candidate_count,
+            "gpt_usage": {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "estimated_cost_usd": 0.0,
+                "rows_sent_to_gpt": 0,
+            },
+        }
+        write_json(run_dir / "summary.json", summary)
+        return summary
 
     pending_gpt: list[dict[str, Any]] = []
 

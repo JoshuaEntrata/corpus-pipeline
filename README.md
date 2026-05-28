@@ -38,7 +38,10 @@ Useful flags:
 --output local_data/manual/manual_extraction_raw.csv
 --limit 100
 --force
+--prefilter-only
 ```
+
+`--prefilter-only` (for `classify` only) runs just the term prefilter and skip logic, writes classification CSV outputs from prefilter labels, and reports how many rows would be GPT candidates (`gpt_candidate_rows`) without calling GPT.
 
 ## Extraction Inputs
 

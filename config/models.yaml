@@ -4,7 +4,7 @@ openai:
   language_model: gpt-5.4-mini
   temperature: 0
   reasoning_effort: low
-  classification_batch_size: 20
+  classification_batch_size: 30
   language_batch_size: 20
   max_retries: 3
   timeout_seconds: 60

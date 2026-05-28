@@ -141,6 +141,47 @@ def test_language_detection_uses_provided_label_without_gpt(tmp_path: Path) -> N
     assert output[0]["language_detected"] == '["cebuano"]'
 
 
+def test_classification_prefilter_only_writes_csv_outputs(tmp_path: Path) -> None:
+    config = _pipeline_config(tmp_path)
+    source = tmp_path / "standardized.csv"
+    write_csv(
+        source,
+        [
+            {
+                "platform": "facebook",
+                "collection_method": "manual_upload",
+                "id": "m1",
+                "text": "AI for hospital triage",
+                "category": "post",
+                "associated_id": "m1",
+                "provided_language_label": "",
+                "provided_classification_label": "",
+            },
+            {
+                "platform": "facebook",
+                "collection_method": "manual_upload",
+                "id": "m2",
+                "text": "AI coding tools are great",
+                "category": "post",
+                "associated_id": "m2",
+                "provided_language_label": "",
+                "provided_classification_label": "",
+            },
+        ],
+        STANDARDIZED_FIELDS,
+    )
+
+    summary = run_classification(config, run_id="prefilter-only", input_path=source, prefilter_only=True)
+    output = read_csv(Path(config["paths"]["master_dir"]) / "classification_all.csv")
+
+    assert summary["mode"] == "prefilter_only"
+    assert summary["gpt_usage"]["rows_sent_to_gpt"] == 0
+    assert len(output) == 2
+    assert output[0]["model_used"] == "prefilter_only"
+    assert output[0]["model_classification"] == "with_ai_and_health_terms"
+    assert output[1]["model_classification"] == "invalid_ai_only"
+
+
 def _pipeline_config(tmp_path: Path) -> dict:
     return {
         "paths": {

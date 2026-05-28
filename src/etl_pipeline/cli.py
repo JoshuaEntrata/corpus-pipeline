@@ -24,6 +24,8 @@ def main(argv: list[str] | None = None) -> int:
     setup_logging(logs_dir(config))
     run_id = args.run_id or make_run_id(config.get("run", {}).get("run_id_format", "%Y%m%dT%H%M%SZ"))
     inputs_dir = args.inputs or config.get("paths", {}).get("inputs_dir", "inputs")
+    if args.prefilter_only and args.command != "classify":
+        parser.error("--prefilter-only is supported only with the 'classify' command.")
 
     if args.command == "run-all":
         summaries = {}
@@ -62,7 +64,12 @@ def main(argv: list[str] | None = None) -> int:
             config, run_id=run_id, input_path=args.input, force=args.force, limit=args.limit
         ),
         "classify": lambda: run_classification(
-            config, run_id=run_id, input_path=args.input, force=args.force, limit=args.limit
+            config,
+            run_id=run_id,
+            input_path=args.input,
+            force=args.force,
+            limit=args.limit,
+            prefilter_only=args.prefilter_only,
         ),
         "detect-language": lambda: run_language_detection(
             config, run_id=run_id, input_path=args.input, force=args.force, limit=args.limit
@@ -86,6 +93,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--prefilter-only", action="store_true")
     return parser
 
 
