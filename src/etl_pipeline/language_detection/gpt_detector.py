@@ -71,9 +71,12 @@ def _parse_batch_results(
         raw_languages = item.get("language_detected", [])
         if not isinstance(raw_languages, list):
             raw_languages = []
-        languages = [str(language) for language in raw_languages if str(language) in supported][:max_languages]
-        label = str(item.get("language_label") or normalize_language_label(languages, order))
-        if label != "out_of_scope" and not label.startswith("mixed_") and label not in supported:
+        normalized_raw = [str(language) for language in raw_languages]
+        has_unsupported = any(language not in supported for language in normalized_raw)
+        languages = [language for language in normalized_raw if language in supported][:max_languages]
+        if has_unsupported:
+            label = "out_of_scope"
+        else:
             label = normalize_language_label(languages, order)
         by_id[row_id] = (languages, label)
     for row in rows:

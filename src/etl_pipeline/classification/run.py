@@ -94,7 +94,8 @@ def run_classification(
                 available_terms = matcher.classify_available_terms(row.get("text", ""))
                 if available_terms == WITH_AI_AND_HEALTH_TERMS:
                     gpt_candidate_count += 1
-                    model_classification = available_terms
+                    # In prefilter-only mode, treat AI+health term matches as valid rows.
+                    model_classification = VALID_AI_HEALTHCARE
                 else:
                     rule_filtered_count += 1
                     model_classification = _rule_label_for_terms(available_terms)
@@ -112,6 +113,7 @@ def run_classification(
             _flush_classification_outputs(pending_writes, all_run_path, valid_run_path, all_master_path, valid_master_path, state_path)
         write_csv(all_run_path, read_csv(all_run_path), CLASSIFICATION_FIELDS)
         write_csv(valid_run_path, read_csv(valid_run_path), CLASSIFICATION_FIELDS)
+        write_csv(valid_master_path, read_csv(valid_master_path), CLASSIFICATION_FIELDS)
         summary = {
             "stage": "classification",
             "run_id": run_id,
@@ -221,6 +223,7 @@ def run_classification(
 
     write_csv(all_run_path, read_csv(all_run_path), CLASSIFICATION_FIELDS)
     write_csv(valid_run_path, read_csv(valid_run_path), CLASSIFICATION_FIELDS)
+    write_csv(valid_master_path, read_csv(valid_master_path), CLASSIFICATION_FIELDS)
 
     gpt_usage = calculate_cost(total_usage, models_config, model)
     gpt_usage["rows_sent_to_gpt"] = rows_sent_to_gpt

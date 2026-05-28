@@ -178,7 +178,7 @@ def test_classification_prefilter_only_writes_csv_outputs(tmp_path: Path) -> Non
     assert summary["gpt_usage"]["rows_sent_to_gpt"] == 0
     assert len(output) == 2
     assert output[0]["model_used"] == "prefilter_only"
-    assert output[0]["model_classification"] == "with_ai_and_health_terms"
+    assert output[0]["model_classification"] == "valid_ai_healthcare"
     assert output[1]["model_classification"] == "invalid_ai_only"
 
 

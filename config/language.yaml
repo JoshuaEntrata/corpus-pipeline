@@ -24,7 +24,7 @@ fasttext:
     ilo: ilocano
 
 fallback:
-  use_gpt_for_low_confidence: false
+  use_gpt_for_low_confidence: true
   use_gpt_for_possible_hiligaynon: true
   gpt_fallback_reasons:
     - possible_hiligaynon

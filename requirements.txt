@@ -4,3 +4,4 @@ openai>=1.82.0
 requests>=2.32.0
 tqdm>=4.67.0
 pytest>=8.2.0
+pandas
