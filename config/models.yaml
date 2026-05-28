@@ -5,7 +5,10 @@ openai:
   temperature: 0
   reasoning_effort: low
   classification_batch_size: 30
+  classification_max_inflight_batches: 2
+  classification_write_buffer_size: 200
   language_batch_size: 20
+  language_max_inflight_batches: 2
   max_retries: 3
   timeout_seconds: 60
   prompt_cache_retention: in_memory

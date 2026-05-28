@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,8 @@ from etl_pipeline.common.state import append_state_rows, read_state_keys, row_ma
 from etl_pipeline.common.summaries import collection_method_counts, distribution, platform_counts
 from etl_pipeline.common.time import utc_now_iso
 from tqdm import tqdm
+
+WriteBuffer = list[dict[str, Any]]
 
 
 def run_classification(
@@ -53,7 +56,8 @@ def run_classification(
     models_config = load_yaml(models_path)
     model = models_config["openai"]["classification_model"]
     batch_size = max(int(models_config.get("openai", {}).get("classification_batch_size", 20)), 1)
-    classifier: GPTClassifier | None = None
+    max_inflight_batches = max(int(models_config.get("openai", {}).get("classification_max_inflight_batches", 1)), 1)
+    write_buffer_size = max(int(models_config.get("openai", {}).get("classification_write_buffer_size", 200)), 1)
     total_usage = TokenUsage()
     rows_sent_to_gpt = 0
     gpt_candidate_count = 0
@@ -61,6 +65,7 @@ def run_classification(
     rule_filtered_count = 0
     skipped_existing = 0
     output_rows: list[dict[str, Any]] = []
+    pending_writes: WriteBuffer = []
 
     run_dir = stage_run_dir(pipeline_config, "classification", run_id)
     all_run_path = run_dir / "classification_all.csv"
@@ -79,9 +84,11 @@ def run_classification(
                     output = _classification_output(row, "provided_label", "prefilter_only", "provided_label")
                     output_rows.append(output)
                     seen.add(key)
-                    _persist_classification_output(
-                        output, all_run_path, valid_run_path, all_master_path, valid_master_path, state_path
-                    )
+                    pending_writes.append(output)
+                    if len(pending_writes) >= write_buffer_size:
+                        _flush_classification_outputs(
+                            pending_writes, all_run_path, valid_run_path, all_master_path, valid_master_path, state_path
+                        )
                     pbar.update(1)
                     continue
                 available_terms = matcher.classify_available_terms(row.get("text", ""))
@@ -94,11 +101,15 @@ def run_classification(
                 output = _classification_output(row, available_terms, "prefilter_only", model_classification)
                 output_rows.append(output)
                 seen.add(key)
-                _persist_classification_output(
-                    output, all_run_path, valid_run_path, all_master_path, valid_master_path, state_path
-                )
+                pending_writes.append(output)
+                if len(pending_writes) >= write_buffer_size:
+                    _flush_classification_outputs(
+                        pending_writes, all_run_path, valid_run_path, all_master_path, valid_master_path, state_path
+                    )
                 pbar.update(1)
 
+        if pending_writes:
+            _flush_classification_outputs(pending_writes, all_run_path, valid_run_path, all_master_path, valid_master_path, state_path)
         write_csv(all_run_path, read_csv(all_run_path), CLASSIFICATION_FIELDS)
         write_csv(valid_run_path, read_csv(valid_run_path), CLASSIFICATION_FIELDS)
         summary = {
@@ -123,86 +134,90 @@ def run_classification(
         return summary
 
     pending_gpt: list[dict[str, Any]] = []
+    futures: set[Future[dict[str, Any]]] = set()
 
-    with tqdm(total=len(input_rows), desc="classification", unit="row") as pbar:
-        for row in input_rows:
-            key = row_key_from_record(row)
-            if key in seen:
-                skipped_existing += 1
-                pbar.update(1)
-                continue
-            provided_classification = _provided_label(row, "provided_classification_label", "classification_label")
-            if provided_classification:
-                output = _classification_output(row, "provided_label", "provided_label", provided_classification)
+    with ThreadPoolExecutor(max_workers=max_inflight_batches) as executor:
+        with tqdm(total=len(input_rows), desc="classification", unit="row") as pbar:
+            for row in input_rows:
+                key = row_key_from_record(row)
+                if key in seen:
+                    skipped_existing += 1
+                    pbar.update(1)
+                    continue
+                provided_classification = _provided_label(row, "provided_classification_label", "classification_label")
+                if provided_classification:
+                    output = _classification_output(row, "provided_label", "provided_label", provided_classification)
+                    output_rows.append(output)
+                    pending_writes.append(output)
+                    seen.add(key)
+                    if len(pending_writes) >= write_buffer_size:
+                        _flush_classification_outputs(
+                            pending_writes, all_run_path, valid_run_path, all_master_path, valid_master_path, state_path
+                        )
+                    pbar.update(1)
+                    pbar.set_postfix(estimated_cost_usd=_cost_so_far(total_usage, models_config, model))
+                    continue
+
+                available_terms = matcher.classify_available_terms(row.get("text", ""))
+                if available_terms == WITH_AI_AND_HEALTH_TERMS:
+                    pending_gpt.append({"key": key, "row": row, "available_terms": available_terms})
+                    if len(pending_gpt) >= batch_size:
+                        batch = pending_gpt[:]
+                        pending_gpt.clear()
+                        future = executor.submit(_process_gpt_batch, batch, models_config, model, pipeline_config)
+                        futures.add(future)
+                    while len(futures) >= max_inflight_batches:
+                        done, _pending = wait(futures, return_when=FIRST_COMPLETED)
+                        for future in done:
+                            futures.remove(future)
+                            usage = future.result()
+                            total_usage = add_usage(total_usage, usage["usage"])
+                            rows_sent_to_gpt += usage["rows_sent"]
+                            for output in usage["outputs"]:
+                                output_rows.append(output)
+                                pending_writes.append(output)
+                                seen.add(row_key_from_record(output))
+                            if len(pending_writes) >= write_buffer_size:
+                                _flush_classification_outputs(
+                                    pending_writes, all_run_path, valid_run_path, all_master_path, valid_master_path, state_path
+                                )
+                            pbar.update(usage["rows_sent"])
+                            pbar.set_postfix(estimated_cost_usd=_cost_so_far(total_usage, models_config, model))
+                    continue
+
+                model_classification = _rule_label_for_terms(available_terms)
+                output = _classification_output(row, available_terms, "rules_terms_filter", model_classification)
                 output_rows.append(output)
+                pending_writes.append(output)
                 seen.add(key)
-                _persist_classification_output(
-                    output, all_run_path, valid_run_path, all_master_path, valid_master_path, state_path
-                )
+                if len(pending_writes) >= write_buffer_size:
+                    _flush_classification_outputs(
+                        pending_writes, all_run_path, valid_run_path, all_master_path, valid_master_path, state_path
+                    )
                 pbar.update(1)
                 pbar.set_postfix(estimated_cost_usd=_cost_so_far(total_usage, models_config, model))
-                continue
 
-            available_terms = matcher.classify_available_terms(row.get("text", ""))
-            if available_terms == WITH_AI_AND_HEALTH_TERMS:
-                pending_gpt.append(
-                    {
-                        "key": key,
-                        "row": row,
-                        "available_terms": available_terms,
-                    }
-                )
-                if len(pending_gpt) >= batch_size:
-                    usage = _process_gpt_batch(
-                        pending_gpt,
-                        models_config,
-                        model,
-                        pipeline_config,
-                        all_run_path,
-                        valid_run_path,
-                        all_master_path,
-                        valid_master_path,
-                        state_path,
-                        output_rows,
-                        seen,
-                        classifier,
+            if pending_gpt:
+                future = executor.submit(_process_gpt_batch, pending_gpt[:], models_config, model, pipeline_config)
+                futures.add(future)
+
+            for future in list(futures):
+                usage = future.result()
+                total_usage = add_usage(total_usage, usage["usage"])
+                rows_sent_to_gpt += usage["rows_sent"]
+                for output in usage["outputs"]:
+                    output_rows.append(output)
+                    pending_writes.append(output)
+                    seen.add(row_key_from_record(output))
+                if len(pending_writes) >= write_buffer_size:
+                    _flush_classification_outputs(
+                        pending_writes, all_run_path, valid_run_path, all_master_path, valid_master_path, state_path
                     )
-                    classifier = usage["classifier"]
-                    total_usage = add_usage(total_usage, usage["usage"])
-                    rows_sent_to_gpt += usage["rows_sent"]
-                    pending_gpt.clear()
-                    pbar.update(usage["rows_sent"])
-                    pbar.set_postfix(estimated_cost_usd=_cost_so_far(total_usage, models_config, model))
-                continue
+                pbar.update(usage["rows_sent"])
+                pbar.set_postfix(estimated_cost_usd=_cost_so_far(total_usage, models_config, model))
 
-            model_classification = _rule_label_for_terms(available_terms)
-            output = _classification_output(row, available_terms, "rules_terms_filter", model_classification)
-            output_rows.append(output)
-            seen.add(key)
-            _persist_classification_output(output, all_run_path, valid_run_path, all_master_path, valid_master_path, state_path)
-            pbar.update(1)
-            pbar.set_postfix(estimated_cost_usd=_cost_so_far(total_usage, models_config, model))
-
-        if pending_gpt:
-            usage = _process_gpt_batch(
-                pending_gpt,
-                models_config,
-                model,
-                pipeline_config,
-                all_run_path,
-                valid_run_path,
-                all_master_path,
-                valid_master_path,
-                state_path,
-                output_rows,
-                seen,
-                classifier,
-            )
-            classifier = usage["classifier"]
-            total_usage = add_usage(total_usage, usage["usage"])
-            rows_sent_to_gpt += usage["rows_sent"]
-            pbar.update(usage["rows_sent"])
-            pbar.set_postfix(estimated_cost_usd=_cost_so_far(total_usage, models_config, model))
+    if pending_writes:
+        _flush_classification_outputs(pending_writes, all_run_path, valid_run_path, all_master_path, valid_master_path, state_path)
 
     write_csv(all_run_path, read_csv(all_run_path), CLASSIFICATION_FIELDS)
     write_csv(valid_run_path, read_csv(valid_run_path), CLASSIFICATION_FIELDS)
@@ -231,20 +246,12 @@ def _process_gpt_batch(
     models_config: dict[str, Any],
     model: str,
     pipeline_config: dict[str, Any],
-    all_run_path: Path,
-    valid_run_path: Path,
-    all_master_path: Path,
-    valid_master_path: Path,
-    state_path: Path,
-    output_rows: list[dict[str, Any]],
-    seen: set[str],
-    classifier: GPTClassifier | None,
 ) -> dict[str, Any]:
     rows_sent = len(pending_gpt)
     usage = TokenUsage()
     batch_failed = False
     try:
-        classifier = classifier or GPTClassifier(models_config)
+        classifier = GPTClassifier(models_config)
         batch_payload = [
             {"row_id": item["key"], "text": item["row"].get("text", "")}
             for item in pending_gpt
@@ -267,6 +274,7 @@ def _process_gpt_batch(
                 error=exc,
             )
 
+    outputs: list[dict[str, Any]] = []
     for item in pending_gpt:
         row = item["row"]
         key = item["key"]
@@ -276,11 +284,9 @@ def _process_gpt_batch(
         )
         model_used = "gpt_error_fallback" if batch_failed else model
         output = _classification_output(row, item["available_terms"], model_used, model_classification)
-        output_rows.append(output)
-        seen.add(key)
-        _persist_classification_output(output, all_run_path, valid_run_path, all_master_path, valid_master_path, state_path)
+        outputs.append(output)
 
-    return {"classifier": classifier, "usage": usage, "rows_sent": rows_sent}
+    return {"usage": usage, "rows_sent": rows_sent, "outputs": outputs}
 
 
 def _classification_output(
@@ -306,20 +312,24 @@ def _provided_label(row: dict[str, Any], *fields: str) -> str:
     return ""
 
 
-def _persist_classification_output(
-    output: dict[str, Any],
+def _flush_classification_outputs(
+    outputs: list[dict[str, Any]],
     all_run_path: Path,
     valid_run_path: Path,
     all_master_path: Path,
     valid_master_path: Path,
     state_path: Path,
 ) -> None:
-    append_csv(all_run_path, [output], CLASSIFICATION_FIELDS)
-    append_csv(all_master_path, [output], CLASSIFICATION_FIELDS)
-    append_state_rows(state_path, "classification", [output], row_key_from_record)
-    if output.get("model_classification") == VALID_AI_HEALTHCARE:
-        append_csv(valid_run_path, [output], CLASSIFICATION_FIELDS)
-        append_csv(valid_master_path, [output], CLASSIFICATION_FIELDS)
+    if not outputs:
+        return
+    append_csv(all_run_path, outputs, CLASSIFICATION_FIELDS)
+    append_csv(all_master_path, outputs, CLASSIFICATION_FIELDS)
+    append_state_rows(state_path, "classification", outputs, row_key_from_record)
+    valid_outputs = [output for output in outputs if output.get("model_classification") == VALID_AI_HEALTHCARE]
+    if valid_outputs:
+        append_csv(valid_run_path, valid_outputs, CLASSIFICATION_FIELDS)
+        append_csv(valid_master_path, valid_outputs, CLASSIFICATION_FIELDS)
+    outputs.clear()
 
 
 def _rule_label_for_terms(available_terms: str) -> str:

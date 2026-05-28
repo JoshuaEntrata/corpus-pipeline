@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Any
 
@@ -44,73 +45,87 @@ def run_language_detection(
     models_config = load_yaml(models_path)
     model = models_config["openai"]["language_model"]
     batch_size = max(int(models_config.get("openai", {}).get("language_batch_size", 20)), 1)
+    max_inflight_batches = max(int(models_config.get("openai", {}).get("language_max_inflight_batches", 1)), 1)
     fasttext_detector = FastTextDetector(language_config)
-    gpt_detector: GPTLanguageDetector | None = None
     total_usage = TokenUsage()
     rows_sent_to_gpt = 0
     skipped_existing = 0
     output_rows: list[dict[str, Any]] = []
 
     pending_gpt: list[dict[str, Any]] = []
+    futures: list[Future[dict[str, Any]]] = []
+    fallback_cfg = language_config.get("fallback", {})
+    fallback_reasons = {
+        reason.strip()
+        for reason in fallback_cfg.get(
+            "gpt_fallback_reasons",
+            ["possible_hiligaynon", "possible_mixed_language", "fasttext_model_unavailable"],
+        )
+        if str(reason).strip()
+    }
+    use_gpt_for_low_confidence = bool(fallback_cfg.get("use_gpt_for_low_confidence", False))
 
-    with tqdm(total=len(input_rows), desc="language_detection", unit="row") as pbar:
-        for row in input_rows:
-            key = row_key_from_record(row)
-            if key in seen:
-                skipped_existing += 1
-                pbar.update(1)
-                continue
-            provided_language = _provided_label(row, "provided_language_label", "language_label")
-            if provided_language:
-                output_rows.append(_language_output(row, [provided_language], provided_language, "provided_label"))
+    with ThreadPoolExecutor(max_workers=max_inflight_batches) as executor:
+        with tqdm(total=len(input_rows), desc="language_detection", unit="row") as pbar:
+            for row in input_rows:
+                key = row_key_from_record(row)
+                if key in seen:
+                    skipped_existing += 1
+                    pbar.update(1)
+                    continue
+                provided_language = _provided_label(row, "provided_language_label", "language_label")
+                if provided_language:
+                    output_rows.append(_language_output(row, [provided_language], provided_language, "provided_label"))
+                    seen.add(key)
+                    pbar.update(1)
+                    pbar.set_postfix(estimated_cost_usd=_cost_so_far(total_usage, models_config, model))
+                    continue
+
+                result = fasttext_detector.detect(row.get("text", ""))
+                allow_reason = result.reason in fallback_reasons
+                if result.reason == "low_confidence" and use_gpt_for_low_confidence:
+                    allow_reason = True
+                if result.needs_gpt_fallback and allow_reason:
+                    pending_gpt.append({"key": key, "row": row})
+                    if len(pending_gpt) >= batch_size:
+                        future = executor.submit(
+                            _process_gpt_language_batch, pending_gpt[:], models_config, language_config, model, pipeline_config
+                        )
+                        futures.append(future)
+                        pending_gpt.clear()
+                    while len(futures) >= max_inflight_batches:
+                        done, _pending = wait(set(futures), return_when=FIRST_COMPLETED)
+                        for future in done:
+                            futures.remove(future)
+                            usage = future.result()
+                            total_usage = add_usage(total_usage, usage["usage"])
+                            rows_sent_to_gpt += usage["rows_sent"]
+                            output_rows.extend(usage["outputs"])
+                            seen.update(usage["keys"])
+                            pbar.update(usage["rows_sent"])
+                            pbar.set_postfix(estimated_cost_usd=_cost_so_far(total_usage, models_config, model))
+                    continue
+
+                output_rows.append(_language_output(row, result.languages, result.label, result.detector))
                 seen.add(key)
                 pbar.update(1)
                 pbar.set_postfix(estimated_cost_usd=_cost_so_far(total_usage, models_config, model))
-                continue
 
-            result = fasttext_detector.detect(row.get("text", ""))
-            if result.needs_gpt_fallback and language_config.get("fallback", {}).get("use_gpt_for_low_confidence", True):
-                pending_gpt.append({"key": key, "row": row})
-                if len(pending_gpt) >= batch_size:
-                    usage = _process_gpt_language_batch(
-                        pending_gpt,
-                        models_config,
-                        language_config,
-                        model,
-                        pipeline_config,
-                        output_rows,
-                        seen,
-                        gpt_detector,
+            if pending_gpt:
+                futures.append(
+                    executor.submit(
+                        _process_gpt_language_batch, pending_gpt[:], models_config, language_config, model, pipeline_config
                     )
-                    gpt_detector = usage["detector"]
-                    total_usage = add_usage(total_usage, usage["usage"])
-                    rows_sent_to_gpt += usage["rows_sent"]
-                    pending_gpt.clear()
-                    pbar.update(usage["rows_sent"])
-                    pbar.set_postfix(estimated_cost_usd=_cost_so_far(total_usage, models_config, model))
-                continue
+                )
 
-            output_rows.append(_language_output(row, result.languages, result.label, result.detector))
-            seen.add(key)
-            pbar.update(1)
-            pbar.set_postfix(estimated_cost_usd=_cost_so_far(total_usage, models_config, model))
-
-        if pending_gpt:
-            usage = _process_gpt_language_batch(
-                pending_gpt,
-                models_config,
-                language_config,
-                model,
-                pipeline_config,
-                output_rows,
-                seen,
-                gpt_detector,
-            )
-            gpt_detector = usage["detector"]
-            total_usage = add_usage(total_usage, usage["usage"])
-            rows_sent_to_gpt += usage["rows_sent"]
-            pbar.update(usage["rows_sent"])
-            pbar.set_postfix(estimated_cost_usd=_cost_so_far(total_usage, models_config, model))
+            for future in futures:
+                usage = future.result()
+                total_usage = add_usage(total_usage, usage["usage"])
+                rows_sent_to_gpt += usage["rows_sent"]
+                output_rows.extend(usage["outputs"])
+                seen.update(usage["keys"])
+                pbar.update(usage["rows_sent"])
+                pbar.set_postfix(estimated_cost_usd=_cost_so_far(total_usage, models_config, model))
 
     run_dir = stage_run_dir(pipeline_config, "language_detection", run_id)
     write_csv(run_dir / "language_detection.csv", output_rows, LANGUAGE_DETECTION_FIELDS)
@@ -144,15 +159,12 @@ def _process_gpt_language_batch(
     language_config: dict[str, Any],
     model: str,
     pipeline_config: dict[str, Any],
-    output_rows: list[dict[str, Any]],
-    seen: set[str],
-    detector: GPTLanguageDetector | None,
 ) -> dict[str, Any]:
     rows_sent = len(pending_gpt)
     usage = TokenUsage()
     batch_failed = False
     try:
-        detector = detector or GPTLanguageDetector(models_config, language_config)
+        detector = GPTLanguageDetector(models_config, language_config)
         batch_payload = [
             {"row_id": item["key"], "text": item["row"].get("text", "")}
             for item in pending_gpt
@@ -172,16 +184,18 @@ def _process_gpt_language_batch(
                 error=exc,
             )
 
+    outputs: list[dict[str, Any]] = []
+    keys: list[str] = []
     for item in pending_gpt:
         languages, label = results.get(
             item["key"],
             ([], language_config.get("labels", {}).get("out_of_scope", "out_of_scope")),
         )
         detector_used = "gpt_error_fallback" if batch_failed else model
-        output_rows.append(_language_output(item["row"], languages, label, detector_used))
-        seen.add(item["key"])
+        outputs.append(_language_output(item["row"], languages, label, detector_used))
+        keys.append(item["key"])
 
-    return {"detector": detector, "usage": usage, "rows_sent": rows_sent}
+    return {"usage": usage, "rows_sent": rows_sent, "outputs": outputs, "keys": keys}
 
 
 def _language_output(row: dict[str, Any], languages: list[str], label: str, detector_used: str) -> dict[str, Any]:
